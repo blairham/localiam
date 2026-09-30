@@ -1,0 +1,21 @@
+# Build output
+/dist/
+/bin/
+
+# Go test + coverage artifacts
+*.test
+*.out
+coverage.*
+
+# Editor / OS
+.DS_Store
+.idea/
+*.swp
+
+# Per-machine Claude Code settings (never committed — see AGENTS.md)
+.claude/settings.local.json
+
+# TLS material from `localiam gen-certs`. NEVER committed — server-key.pem is a
+# real private key, and the detect-private-key hook is right to refuse it.
+# Regenerate per cluster: localiam gen-certs -hosts localiam,localhost -out certs
+/certs/

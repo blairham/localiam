@@ -1,0 +1,15 @@
+# Carries an rds block with a named Postgres role.
+name: worker
+podIdentity:
+  permissions:
+    msk:
+      cluster: true
+      readTopics:
+        - events
+      writeTopics:
+        - events-processed
+      transactionalIds:
+        - worker-txn-*
+    rds:
+      dbUser: worker_app
+      database: app

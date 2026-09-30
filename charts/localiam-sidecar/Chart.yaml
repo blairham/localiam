@@ -1,0 +1,14 @@
+apiVersion: v2
+name: localiam-sidecar
+description: Templates for localiam's agent and proxy sidecars, to include in your own workload and store charts
+type: library
+version: 0.0.0
+appVersion: "0.0.0"
+keywords:
+  - iam
+  - sigv4
+  - sidecar
+  - testing
+home: https://github.com/blairham/localiam
+sources:
+  - https://github.com/blairham/localiam

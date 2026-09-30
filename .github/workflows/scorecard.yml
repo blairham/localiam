@@ -1,0 +1,45 @@
+name: Scorecard
+
+# OpenSSF Scorecard grades the repository's supply-chain posture — branch
+# protection, pinned dependencies, SAST, signed releases — and publishes the
+# result for the README badge.
+#
+# ⚠ publish_results imposes restrictions on this workflow: no workflow- or
+# job-level `env:` or `defaults:`, no containers or services, and only the
+# actions used below. Anything else and the results are not published.
+on:
+  branch_protection_rule:
+  schedule:
+    - cron: '17 6 * * 1'
+  push:
+    branches: [main]
+
+permissions: read-all
+
+jobs:
+  analysis:
+    name: Scorecard analysis
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write # upload the SARIF to code scanning
+      id-token: write # sign the published results
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: ossf/scorecard-action@v2.4.4
+        with:
+          results_file: results.sarif
+          results_format: sarif
+          publish_results: true
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: scorecard-sarif
+          path: results.sarif
+          retention-days: 5
+
+      - uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: results.sarif

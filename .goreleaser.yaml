@@ -1,0 +1,133 @@
+version: 2
+
+# GoReleaser configuration for localiam
+# See: https://goreleaser.com
+project_name: localiam
+
+
+builds:
+  - id: localiam
+    binary: localiam
+    main: ./cmd/localiam
+    env:
+      - CGO_ENABLED=0
+    # A cluster runs it in Linux containers; darwin is for running the halves on a
+    # laptop. No windows: the agent contract is loopback-only EKS Pod Identity.
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+  # /bin/sh for the image only: the gated shell (cmd/sh). Linux only, and in
+  # no archive — it exists to be copied into the container.
+  - id: sh
+    binary: sh
+    main: ./cmd/sh
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+
+archives:
+  - id: default
+    ids:
+      - localiam
+    formats:
+      - tar.gz
+    # this name template makes the OS and Arch compatible with the results of uname.
+    name_template: >-
+      {{ .ProjectName }}_ {{- title .Os }}_ {{- if eq .Arch "amd64" }}x86_64 {{- else }}{{ .Arch }}{{ end }}
+
+# macOS signing + notarization, matching ghorg, stevedore, go-pre-commit and
+# go-claude-swap. Gated on isEnvSet, so releases still succeed unsigned when the
+# secrets are absent.
+notarize:
+  macos:
+    - enabled: '{{ isEnvSet "MACOS_SIGN_P12" }}'
+      ids:
+        - localiam
+      sign:
+        certificate: "{{.Env.MACOS_SIGN_P12}}"
+        password: "{{.Env.MACOS_SIGN_PASSWORD}}"
+      notarize:
+        issuer_id: "{{.Env.MACOS_NOTARY_ISSUER_ID}}"
+        key_id: "{{.Env.MACOS_NOTARY_KEY_ID}}"
+        key: "{{.Env.MACOS_NOTARY_KEY}}"
+        wait: true
+
+
+# The image the Helm charts pull: ghcr.io/blairham/localiam:<version>, the
+# same binaries as the archives plus the gated /bin/sh.
+#
+# dockers_v2 traps (measured on blairham/sh): --snapshot builds per-arch and
+# never the index, so verify against a real registry; the release workflow
+# needs docker/setup-buildx-action, because the runner's default driver cannot
+# push a manifest list; SBOM attestation is on by default, so it is off.
+dockers_v2:
+  - id: image
+    ids:
+      - localiam
+      - sh
+    images:
+      - ghcr.io/blairham/localiam
+    dockerfile: Dockerfile
+    flags:
+      - --target=release
+    platforms:
+      - linux/amd64
+      - linux/arm64
+    sbom: false
+    # `latest` moves only on a real release, never a prerelease tag.
+    tags:
+      - "{{ .Version }}"
+      - "{{ if not .Prerelease }}latest{{ end }}"
+    labels:
+      org.opencontainers.image.title: localiam
+      org.opencontainers.image.description: Local AWS IAM data-plane auth for Redis, Postgres and Kafka — a test tool
+      org.opencontainers.image.url: https://github.com/blairham/localiam
+      org.opencontainers.image.source: https://github.com/blairham/localiam
+      org.opencontainers.image.licenses: Apache-2.0
+      org.opencontainers.image.version: "{{ .Version }}"
+      org.opencontainers.image.revision: "{{ .FullCommit }}"
+      org.opencontainers.image.created: "{{ .Date }}"
+
+checksum:
+  name_template: 'checksums.txt'
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  use: github
+  groups:
+    - title: Features
+      regexp: '^.*?feat(\([[:word:]]+\))??!?:.+$'
+      order: 0
+    - title: Bug Fixes
+      regexp: '^.*?fix(\([[:word:]]+\))??!?:.+$'
+      order: 1
+    - title: Other
+      order: 999
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^chore:'
+
+release:
+  draft: false
+  replace_existing_draft: true
+  target_commitish: "{{ .Commit }}"
+  prerelease: auto
+  mode: replace
+  footer: |
+    **Full Changelog**: https://github.com/blairham/localiam/compare/{{ .PreviousTag }}...{{ .Tag }}

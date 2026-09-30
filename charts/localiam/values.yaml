@@ -1,0 +1,123 @@
+# Default values for the localiam server.
+#
+# localiam is a TEST TOOL, not an authentication system: read SECURITY.md in
+# the repository before running it anywhere shared.
+
+image:
+  repository: ghcr.io/blairham/localiam
+  # Defaults to the chart's appVersion when unset. Pin an immutable tag or a
+  # digest — a moving tag makes a rollout unreproducible.
+  tag: ""
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+additionalLabels: {}
+
+# There is deliberately no replicaCount. The credential store is in memory, so
+# a second replica would hold a different half of the credentials and verify
+# tokens by coin toss. The Deployment runs exactly one pod with a Recreate
+# strategy.
+
+# AWS region tokens must be scoped to (-region).
+region: us-east-1
+
+registration:
+  # Bearer token agents present to register credentials (-token). Empty
+  # generates a random one on install and keeps it across upgrades. Never
+  # run with registration open: anyone who can reach the port could register
+  # credentials.
+  token: ""
+  # Use an existing Secret instead of creating one. Agents in other
+  # namespaces need the same token in a Secret of their own.
+  existingSecret: ""
+  secretKey: register-token
+
+# Per-service specs to enforce (-specs), keyed by service name — the agent's
+# -service. Empty means authenticate only, never authorize. Each value is the
+# spec document; see docs/reference/policy.md.
+#
+#   specs:
+#     api:
+#       podIdentity:
+#         permissions:
+#           elastiCache: true
+#           rds: {dbUser: api}
+specs: {}
+# Or mount specs from an existing ConfigMap (one <service>.yaml key each).
+# Takes precedence over `specs`.
+existingSpecsConfigMap: ""
+
+# Bootstrap principals (-principals): long-lived static credentials for init
+# containers that run before any agent sidecar is up. Stored in a Secret.
+# See docs/reference/cli.md#bootstrap-principals.
+#
+#   bootstrapPrincipals:
+#     - accessKeyId: AKIDMIGRATE00000000
+#       secretKey: not-a-real-secret-local-only
+#       arn: arn:aws:iam::000000000000:role/migrate
+#       service: migrate
+bootstrapPrincipals: []
+
+# Gated shell (internal/shell). /bin/sh is in every image regardless, for
+# `kubectl exec`; this only decides whether POST /debug/sh is mounted, by
+# passing a bearer token as LOCALIAM_SHELL_TOKEN. OFF by default. The token is
+# read with `optional: true`, so a missing Secret leaves the endpoint unmounted
+# (404) instead of wedging the pod in CreateContainerConfigError.
+shell:
+  enabled: false
+  # Creates a Secret holding this token. Leave empty and set existingSecret to
+  # use one made elsewhere (e.g. by an ExternalSecret).
+  token: ""
+  existingSecret: ""
+  secretKey: shell-token
+
+service:
+  type: ClusterIP
+  port: 8080
+  annotations: {}
+
+# Restrict who can reach the server. When enabled, only pods matching `from`
+# (agents registering, proxies verifying) are admitted. The endpoint also
+# carries /debug/sh when the shell is enabled.
+networkPolicy:
+  enabled: false
+  # NetworkPolicy peers, e.g.
+  #   - namespaceSelector: {}
+  #     podSelector: {matchLabels: {localiam.io/sidecar: "true"}}
+  from: []
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+podAnnotations: {}
+podLabels: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+resources:
+  requests:
+    cpu: 10m
+    memory: 32Mi
+  limits:
+    memory: 128Mi
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+priorityClassName: ""

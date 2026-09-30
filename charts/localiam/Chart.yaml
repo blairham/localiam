@@ -1,0 +1,16 @@
+apiVersion: v2
+name: localiam
+description: The localiam server — local AWS IAM data-plane auth for Redis, Postgres and Kafka (a test tool)
+type: application
+version: 0.0.0
+appVersion: "0.0.0"
+keywords:
+  - iam
+  - sigv4
+  - elasticache
+  - rds
+  - msk
+  - testing
+home: https://github.com/blairham/localiam
+sources:
+  - https://github.com/blairham/localiam

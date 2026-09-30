@@ -1,0 +1,23 @@
+name: Feature request
+description: A client, store or auth path localiam should support
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        localiam issues credentials and verifies tokens; it never mints a token
+        itself, because then the tests would exercise localiam's minting
+        instead of your service's. Requests for a new store, a new client's
+        token shape or a policy field fit well.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to test?
+      description: The service and the auth path, not the feature you have in mind.
+    validations:
+      required: true
+  - type: textarea
+    id: client
+    attributes:
+      label: Which client library mints the token?
+      description: Name and version. A link to where it signs is ideal — the verifier is cross-checked against the exact function a client calls.

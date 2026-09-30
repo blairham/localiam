@@ -1,0 +1,9 @@
+# The wholesale-role-swap shape: an msk block was added and the
+# previously-shared rds-db:connect was silently lost.
+name: msk-only
+podIdentity:
+  permissions:
+    msk:
+      cluster: true
+      topics:
+        - events

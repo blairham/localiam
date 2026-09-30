@@ -1,0 +1,129 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "localiam.fullname" . }}
+  labels:
+    {{- include "localiam.labels" . | nindent 4 }}
+spec:
+  # Exactly one: the credential store is in memory. Recreate rather than
+  # RollingUpdate so two servers never split the agents' registrations.
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "localiam.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        # Specs are read at startup, so a changed spec needs a restart. A
+        # restart also forgets every registered credential: workloads get
+        # `unknown access key` until their agent issues the next credential
+        # (at most the agent's -ttl), or restart them to recover at once.
+        checksum/specs: {{ toJson .Values.specs | sha256sum }}
+        checksum/principals: {{ toJson .Values.bootstrapPrincipals | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "localiam.labels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "localiam.serviceAccountName" . }}
+      # The server never calls the Kubernetes API.
+      automountServiceAccountToken: false
+      {{- with .Values.priorityClassName }}
+      priorityClassName: {{ . }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: localiam
+          image: {{ include "localiam.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+            - server
+            - -listen=:8080
+            - -region={{ .Values.region }}
+            - -token=$(LOCALIAM_REGISTRATION_TOKEN)
+            {{- if include "localiam.hasSpecs" . }}
+            - -specs=/etc/localiam/specs
+            {{- end }}
+            {{- if .Values.bootstrapPrincipals }}
+            - -principals=/etc/localiam/principals/principals.json
+            {{- end }}
+          env:
+            - name: LOCALIAM_REGISTRATION_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "localiam.registrationSecret" . }}
+                  key: {{ .Values.registration.secretKey }}
+            {{- if .Values.shell.enabled }}
+            - name: LOCALIAM_SHELL_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "localiam.shellSecret" . }}
+                  key: {{ .Values.shell.secretKey }}
+                  # A missing Secret leaves the endpoint off, not the pod down.
+                  optional: true
+            {{- end }}
+            - name: HOSTNAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            {{- if include "localiam.hasSpecs" . }}
+            - name: specs
+              mountPath: /etc/localiam/specs
+              readOnly: true
+            {{- end }}
+            {{- if .Values.bootstrapPrincipals }}
+            - name: principals
+              mountPath: /etc/localiam/principals
+              readOnly: true
+            {{- end }}
+      volumes:
+        {{- if include "localiam.hasSpecs" . }}
+        - name: specs
+          configMap:
+            name: {{ include "localiam.specsConfigMap" . }}
+        {{- end }}
+        {{- if .Values.bootstrapPrincipals }}
+        - name: principals
+          secret:
+            secretName: {{ include "localiam.fullname" . }}-principals
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

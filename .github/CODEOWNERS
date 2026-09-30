@@ -1,0 +1,4 @@
+# Every change needs the maintainer's review; verify/ is where a mistake
+# becomes a token accepted that should not be.
+*        @blairham
+/verify/ @blairham

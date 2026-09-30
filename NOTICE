@@ -1,0 +1,11 @@
+localiam — local AWS IAM data-plane authentication for Redis, Postgres and Kafka
+Copyright 2026 Blair Hamilton
+
+This product is licensed under the Apache License, Version 2.0.
+You may obtain a copy of the License in the LICENSE file, or at
+http://www.apache.org/licenses/LICENSE-2.0
+
+The verify package is an independent implementation of AWS Signature
+Version 4 verification. It contains no code from any AWS SDK; test vectors
+are produced at test time by aws-sdk-go-v2 and franz-go, which are
+test-only dependencies under their own licenses.

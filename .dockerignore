@@ -1,0 +1,5 @@
+.git
+dist
+certs
+*.test
+*.out

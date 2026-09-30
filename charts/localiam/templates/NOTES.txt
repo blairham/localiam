@@ -1,0 +1,20 @@
+localiam server {{ .Chart.AppVersion }} is running as {{ include "localiam.fullname" . }}.
+
+localiam is a TEST TOOL, not an authentication system: never expose it outside
+networks you control. See https://github.com/blairham/localiam/blob/main/SECURITY.md
+
+Agents register at:
+  http://{{ include "localiam.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.service.port }}
+
+Registration token:
+  kubectl get secret -n {{ .Release.Namespace }} {{ include "localiam.registrationSecret" . }} \
+    -o jsonpath='{.data.{{ .Values.registration.secretKey }}}' | base64 -d
+Agents in other namespaces need it in a Secret of their own.
+{{- if not (include "localiam.hasSpecs" .) }}
+
+⚠ No specs are loaded: every authenticated identity is permitted. Set `specs`
+  to enforce per-service grants.
+{{- end }}
+
+Add the agent to your workloads, and the proxies beside your stores, with the
+localiam-sidecar library chart.

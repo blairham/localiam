@@ -1,0 +1,14 @@
+# A service spec using the `topics:` shorthand form.
+name: api
+podIdentity:
+  permissions:
+    elastiCache: true
+    msk:
+      cluster: true
+      topics:
+        - requests
+        - events
+        - status
+      groups:
+        - api-*
+        - shared-*

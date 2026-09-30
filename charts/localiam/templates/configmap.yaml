@@ -1,0 +1,13 @@
+{{- if and .Values.specs (not .Values.existingSpecsConfigMap) }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "localiam.specsConfigMap" . }}
+  labels:
+    {{- include "localiam.labels" . | nindent 4 }}
+data:
+  {{- range $service, $spec := .Values.specs }}
+  {{ $service }}.yaml: |
+    {{- toYaml $spec | nindent 4 }}
+  {{- end }}
+{{- end }}

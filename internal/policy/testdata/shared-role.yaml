@@ -1,0 +1,4 @@
+# A service with no permissions block: it runs on the shared
+# data-services role, which grants everything.
+name: shared-role
+podIdentity: {}

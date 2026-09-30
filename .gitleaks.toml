@@ -1,0 +1,21 @@
+# gitleaks configuration for localiam.
+#
+# The test suite's golden vectors are signed with AWS's PUBLISHED SigV4 example
+# credentials — the ones printed in AWS's own signing documentation. They are
+# deliberately used instead of anything minted against a real account, so a
+# committed golden vector carries no real secret. gitleaks cannot tell the
+# difference by shape, so they are allowlisted by exact value.
+#
+# ⚠ Allowlist the EXACT example strings, never a broad pattern like
+# `AKIA[A-Z0-9]{16}` — a wildcard here would silence the rule that exists to
+# catch a genuine key pasted into a test.
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "AWS published SigV4 example credentials used as golden test vectors"
+regexes = [
+  '''AKIDEXAMPLE''',
+  '''wJalrXUtnFEMI/K7MDENG\+bPxRfiCYEXAMPLEKEY''',
+]

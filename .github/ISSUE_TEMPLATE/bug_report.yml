@@ -1,0 +1,53 @@
+name: Bug report
+description: Something localiam did that it should not have
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. **If localiam accepted a token it should have
+        rejected, that is a security issue** — report it privately through
+        Security → Report a vulnerability, not here.
+
+        Never paste real AWS credentials or tokens minted against a real
+        account. localiam's own credentials are fake, but redact them anyway.
+  - type: input
+    id: version
+    attributes:
+      label: localiam version or commit
+    validations:
+      required: true
+  - type: dropdown
+    id: role
+    attributes:
+      label: Which part?
+      options:
+        - server (verifier / registration API)
+        - agent (Pod Identity sidecar)
+        - proxy — Redis
+        - proxy — Postgres
+        - proxy — Kafka
+        - verify package (used as a library)
+        - policy / service specs
+        - container image
+    validations:
+      required: true
+  - type: input
+    id: client
+    attributes:
+      label: Client library and version
+      description: The code that minted the token, e.g. aws-sdk-go-v2 feature/rds/auth v1.7.3, franz-go v1.21, Confluent.Kafka + AWS.MSK.Auth.
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect instead?
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: localiam logs
+      description: The accepted/rejected lines name the reason a token was refused.
+      render: shell
