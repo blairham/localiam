@@ -11,7 +11,7 @@ Guidance for AI coding agents (Claude Code, Cursor, Copilot, Codex, OpenCode, â€
 - Repo: `github.com/blairham/localiam` (public). `.github/workflows/ci.yml` runs pre-commit, `go test -race`, a Docker build and the Helm charts; a `v*` tag runs GoReleaser, which publishes the binaries and `ghcr.io/blairham/localiam`.
 - **Consumed as a CONTAINER, not a module.** Nothing imports localiam; services run it as an agent sidecar, a proxy sidecar beside a store, and one central server. So the release that matters is the image, not a module tag.
 
-The problem it solves: local environments run plaintext, so an IAM auth path is first exercised against real AWS. The classic failure is a service that mints one ElastiCache token at startup and never refreshes it: the first Redis reconnect past the 15-minute TTL re-auths with an expired token, gets `WRONGPASS`, and the pod stays broken for the rest of its life. A in-cluster broker that accepts any token cannot reproduce that. This one can.
+The problem it solves: local environments run plaintext, so an IAM auth path is first exercised against real AWS. The classic failure is a service that mints one ElastiCache token at startup and never refreshes it: the first Redis reconnect past the 15-minute TTL re-auths with an expired token, gets `WRONGPASS`, and the pod stays broken for the rest of its life. An in-cluster broker that accepts any token cannot reproduce that. This one can.
 
 ## Quick Reference
 

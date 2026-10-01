@@ -18,3 +18,12 @@ updates:
     directory: /
     schedule:
       interval: monthly
+    ignore:
+      # The builder tracks the Go line pinned in go.mod (1.26.x). A new Go
+      # minor (1.26 -> 1.27) moves go.mod, .tool-versions and every sibling
+      # repo together, by hand — not as a lone Dockerfile bump. Digest and
+      # patch updates still come through.
+      - dependency-name: golang
+        update-types:
+          - version-update:semver-major
+          - version-update:semver-minor
