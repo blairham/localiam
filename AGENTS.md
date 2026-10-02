@@ -141,6 +141,7 @@ Test-only, and deliberately so — the verifier itself has no non-stdlib imports
 
 - `github.com/aws/aws-sdk-go-v2` — the presigner, the **RDS signer** (`feature/rds/auth`, the function pgx-based services call) and the **container credentials provider** (`credentials/endpointcreds`, the one a Pod Identity pod uses), all for cross-check vectors.
 - `github.com/twmb/franz-go` — `sasl/aws`, to mint `AWS_MSK_IAM` cross-check vectors.
+- `github.com/twmb/franz-go/pkg/kfake` — an in-process Kafka broker, so the Kafka proxy's per-topic authorization is tested end to end with a real client (`kafka_authz_test.go`).
 
 Non-test dependencies are `go.yaml.in/yaml/v3` (policy — the maintained successor to the archived `gopkg.in/yaml.v3`), `github.com/blairham/sh` (the gated shell) and stdlib. `verify` itself has **no** non-stdlib imports, by the independence rule.
 

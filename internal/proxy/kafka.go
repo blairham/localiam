@@ -68,6 +68,11 @@ type KafkaOptions struct {
 	// AWS MSK endpoint for the region.
 	Host        string
 	DialTimeout time.Duration
+	// Authorize, when set, enforces per-operation policy after authentication:
+	// every Produce, Fetch and FindCoordinator is checked, and a denied one is
+	// answered with the Kafka authorization error instead of reaching the
+	// broker. Nil keeps the original behavior — authenticate, then splice.
+	Authorize KafkaAuthorizer
 }
 
 // Kafka is the MSK-IAM-terminating proxy.
@@ -167,40 +172,45 @@ func (p *Kafka) handle(ctx context.Context, client net.Conn) {
 	}()
 
 	for {
-		authenticated, err := p.step(ctx, client, backend)
+		id, authenticated, err := p.step(ctx, client, backend)
 		if err != nil {
 			if !errors.Is(err, io.EOF) {
 				p.log.Debug("localiam: sasl phase ended", "error", err)
 			}
 			return
 		}
-		if authenticated {
-			// Everything from here is the broker's business.
-			p.spliceKafka(client, backend)
+		if !authenticated {
+			continue
+		}
+		if p.opts.Authorize != nil {
+			p.enforce(ctx, client, backend, id)
 			return
 		}
+		// No policy to enforce: everything from here is the broker's business.
+		p.spliceKafka(client, backend)
+		return
 	}
 }
 
 // step handles exactly one pre-authentication request, reporting whether SASL
 // has now completed.
-func (p *Kafka) step(ctx context.Context, client, backend net.Conn) (bool, error) {
+func (p *Kafka) step(ctx context.Context, client, backend net.Conn) (Identity, bool, error) {
 	frame, err := readFrame(client)
 	if err != nil {
-		return false, err
+		return Identity{}, false, err
 	}
 	hdr, err := parseRequestHeader(frame)
 	if err != nil {
-		return false, err
+		return Identity{}, false, err
 	}
 
 	switch hdr.apiKey {
 	case apiKeyAPIVersions:
 		// Forwarded so the client learns what the REAL broker supports — then
 		// the two SASL entries are clamped on the way back.
-		return false, p.relayAPIVersions(client, backend, frame, hdr)
+		return Identity{}, false, p.relayAPIVersions(client, backend, frame, hdr)
 	case apiKeySaslHandshake:
-		return false, p.answerHandshake(client, frame, hdr)
+		return Identity{}, false, p.answerHandshake(client, frame, hdr)
 	case apiKeySaslAuthenticate:
 		return p.answerAuthenticate(ctx, client, frame, hdr)
 	default:
@@ -208,7 +218,7 @@ func (p *Kafka) step(ctx context.Context, client, backend net.Conn) (bool, error
 		// closing. Forwarding would make the proxy a bypass.
 		p.log.Info("localiam: kafka request before authentication",
 			"apiKey", hdr.apiKey, "remote", client.RemoteAddr().String())
-		return false, errors.New("proxy: request before authentication")
+		return Identity{}, false, errors.New("proxy: request before authentication")
 	}
 }
 
@@ -266,11 +276,11 @@ func (p *Kafka) relayAPIVersions(client, backend net.Conn, frame []byte, hdr req
 	if err != nil {
 		return err
 	}
-	clampSaslVersions(resp, hdr.apiVersion >= 3, p.log)
+	clampAPIVersions(resp, hdr.apiVersion >= 3, p.versionLimits(), p.log)
 	return writeFrame(client, resp)
 }
 
-// clampSaslVersions rewrites the max_version of the two SASL entries in an
+// clampAPIVersions lowers the max_version of each API named in limits, in an
 // ApiVersions response, in place.
 //
 // In place is the point: every entry is fixed width, so patching two int16s
@@ -280,7 +290,7 @@ func (p *Kafka) relayAPIVersions(client, backend net.Conn, frame []byte, hdr req
 // The response header for ApiVersions is ALWAYS v0 (a bare correlation id) even
 // when the body is flexible — the client has to parse it before it knows the
 // version it is dealing with.
-func clampSaslVersions(resp []byte, flexible bool, log *slog.Logger) {
+func clampAPIVersions(resp []byte, flexible bool, limits map[int16]int16, log *slog.Logger) {
 	off := 4 // correlation id
 	if len(resp) < off+2 {
 		return
@@ -309,12 +319,11 @@ func clampSaslVersions(resp []byte, flexible bool, log *slog.Logger) {
 			return
 		}
 		key := int16(binary.BigEndian.Uint16(resp[off : off+2]))
-		if key == apiKeySaslHandshake || key == apiKeySaslAuthenticate {
+		if limit, ok := limits[key]; ok {
 			maxOff := off + 4
-			if cur := int16(binary.BigEndian.Uint16(resp[maxOff : maxOff+2])); cur > saslMaxVersion {
-				binary.BigEndian.PutUint16(resp[maxOff:maxOff+2], uint16(saslMaxVersion))
-				log.Debug("localiam: clamped SASL api version",
-					"apiKey", key, "from", cur, "to", saslMaxVersion)
+			if cur := int16(binary.BigEndian.Uint16(resp[maxOff : maxOff+2])); cur > limit {
+				binary.BigEndian.PutUint16(resp[maxOff:maxOff+2], uint16(limit))
+				log.Debug("localiam: clamped api version", "apiKey", key, "from", cur, "to", limit)
 			}
 		}
 		off += 6
@@ -352,10 +361,10 @@ func (p *Kafka) answerHandshake(client net.Conn, _ []byte, hdr requestHeader) er
 // connection may proceed.
 func (p *Kafka) answerAuthenticate(
 	ctx context.Context, client net.Conn, _ []byte, hdr requestHeader,
-) (bool, error) {
+) (Identity, bool, error) {
 	payload, err := readBytesField(hdr.body)
 	if err != nil {
-		return false, err
+		return Identity{}, false, err
 	}
 
 	mechanism, token := classifySASLPayload(payload)
@@ -365,7 +374,7 @@ func (p *Kafka) answerAuthenticate(
 			"mechanism", mechanism, "remote", client.RemoteAddr().String(), "reason", verr.Error())
 		// SASL_AUTHENTICATION_FAILED. The client sees only this; the reason
 		// lives in the line above, which is the whole diagnostic.
-		return false, p.writeAuthResponse(client, hdr, 58, "localiam: authentication failed", nil)
+		return Identity{}, false, p.writeAuthResponse(client, hdr, 58, "localiam: authentication failed", nil)
 	}
 
 	p.log.Info("localiam: kafka auth accepted",
@@ -377,7 +386,7 @@ func (p *Kafka) answerAuthenticate(
 	if mechanism == mechAWSMSKIAM {
 		out = []byte(`{"version":"2020_10_22","request-id":"localiam"}`)
 	}
-	return true, p.writeAuthResponse(client, hdr, 0, "", out)
+	return id, true, p.writeAuthResponse(client, hdr, 0, "", out)
 }
 
 func (p *Kafka) writeAuthResponse(

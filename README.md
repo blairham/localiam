@@ -96,9 +96,8 @@ See [Running in Kubernetes](docs/kubernetes.md).
 
 ### Known gaps
 
-- Per-topic Kafka authorization is not enforced: the server can answer it
-  (`/v1/authorize`) but the Kafka proxy does not ask. Connect-level policy is
-  enforced.
+- A Kafka request that names both an allowed and a denied topic is refused
+  as a whole; see [Policy](docs/reference/policy.md#kafka-per-operation).
 - The credential store is in memory: run one server replica, and restart the
   agents after restarting the server.
 

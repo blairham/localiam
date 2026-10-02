@@ -188,8 +188,8 @@ kubectl create secret generic localiam-kafka-tls --from-file=certs/
 Mount `server.pem`/`server-key.pem` into the proxy, `ca.pem` into each client,
 and set the clients' `SSL_CERT_FILE` to it.
 
-⚠ Per-topic Kafka policy is not enforced yet; see
-[Policy](reference/policy.md#what-is-enforced-where).
+The proxy enforces each service's topics, groups and transactional ids; see
+[Policy](reference/policy.md#kafka-per-operation).
 
 ## Hardening a shared cluster
 

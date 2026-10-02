@@ -125,10 +125,10 @@ block into topic/group grants, takes `rds.dbUser` as an identity, and treats
 ElastiCache as connect-only. Anything more is modelling AWS for its own sake.
 
 **The payoff:** a cluster catches "you forgot to add topic X to the service's
-`msk.topics`" — which otherwise only fails once deployed. ⚠ Not yet: the server
-answers per-topic questions at `/v1/authorize`, but the Kafka proxy does not
-ask them, so today only connect-level Kafka policy is enforced. See
-[Policy](../reference/policy.md#what-is-enforced-where).
+`msk.topics`" — which otherwise only fails once deployed. The Kafka proxy checks
+every Produce, Fetch and FindCoordinator against the spec and answers a denial
+with the Kafka authorization error that names it; see
+[Policy](../reference/policy.md#kafka-per-operation).
 
 ## Fidelity target: lifecycle, not policy
 

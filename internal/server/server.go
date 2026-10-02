@@ -290,35 +290,51 @@ func (s *Server) handleAuthorize(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if s.opts.Specs == nil {
-		writeJSON(w, http.StatusOK, map[string]any{keyAllowed: true, "reason": "no specs loaded"})
+	allowed, reason, err := s.Authorize(r.Context(), req.Service, req.Action, req.Resource)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	spec, found := s.opts.Specs[req.Service]
-	if !found {
-		writeJSON(w, http.StatusOK, map[string]any{
-			keyAllowed: false, "reason": "no service spec for " + req.Service,
-		})
-		return
+	resp := map[string]any{keyAllowed: allowed}
+	if reason != "" {
+		resp["reason"] = reason
 	}
+	writeJSON(w, http.StatusOK, resp)
+}
 
-	var allowed bool
-	switch req.Action {
-	case "ReadData":
-		allowed = spec.MayReadTopic(req.Resource)
-	case "WriteData":
-		allowed = spec.MayWriteTopic(req.Resource)
-	case "Group":
-		allowed = spec.MayUseGroup(req.Resource)
-	case "TransactionalId":
-		allowed = spec.MayUseTransactionalID(req.Resource)
-	case "Connect":
-		allowed = spec.MayConnectKafka()
-	default:
-		writeErr(w, http.StatusBadRequest, "unknown action "+req.Action)
-		return
+// ErrUnknownAction is an authorize action the policy model does not have.
+var ErrUnknownAction = errors.New("unknown action")
+
+// Authorize answers one per-operation policy question for an authenticated
+// service: the path POST /v1/authorize and the Kafka proxies `localiam server`
+// hosts in-process both take, so neither can drift from the other. reason is
+// set when the answer comes from something other than a grant — no specs
+// loaded (everything allowed) or no spec for the service (nothing allowed).
+func (s *Server) Authorize(
+	_ context.Context,
+	service, action, resource string,
+) (allowed bool, reason string, err error) {
+	if s.opts.Specs == nil {
+		return true, "no specs loaded", nil
 	}
-	writeJSON(w, http.StatusOK, map[string]any{keyAllowed: allowed})
+	spec, found := s.opts.Specs[service]
+	if !found {
+		return false, "no service spec for " + service, nil
+	}
+	switch action {
+	case "ReadData":
+		return spec.MayReadTopic(resource), "", nil
+	case "WriteData":
+		return spec.MayWriteTopic(resource), "", nil
+	case "Group":
+		return spec.MayUseGroup(resource), "", nil
+	case "TransactionalId":
+		return spec.MayUseTransactionalID(resource), "", nil
+	case "Connect":
+		return spec.MayConnectKafka(), "", nil
+	default:
+		return false, "", fmt.Errorf("%w %s", ErrUnknownAction, action)
+	}
 }
 
 func decode[T any](w http.ResponseWriter, r *http.Request) (T, bool) {

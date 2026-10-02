@@ -73,15 +73,39 @@ model exists to catch.
 |---|---|---|
 | Redis | `elastiCache` | nothing finer exists in IAM |
 | Postgres | `rds.dbUser` matches the user in the startup packet | Postgres `GRANT`s, untouched |
-| Kafka | `msk.cluster` | topics, groups and transactional ids via `/v1/authorize` — **see the gap below** |
+| Kafka | `msk.cluster` | every topic, group and transactional id, checked by the Kafka proxy — see below |
 
 A token that verifies but whose service has no spec gets
 `localiam: no service spec for "<service>"`; one whose spec does not permit the
 connection gets `localiam: <service> is authenticated but not permitted`.
 
-⚠ **Gap: per-topic Kafka authorization is not enforced yet.** The server
-answers per-operation questions at [`POST /v1/authorize`](http-api.md#post-v1authorize),
-but the Kafka proxy only decodes the SASL handshake and then splices the
-connection, so nothing calls it. Today a Kafka client that may connect may
-produce to and consume from any topic. The connect check (`msk.cluster`) is
-enforced.
+### Kafka, per operation
+
+After SASL, the Kafka proxy checks every request that touches a topic, group
+or transactional id, through [`POST /v1/authorize`](http-api.md#post-v1authorize)
+(or the server in-process, for proxies `localiam server` hosts):
+
+| Request | Needs | Denied with |
+|---|---|---|
+| Produce | `WriteData` on every topic (`topics`, `writeTopics`, `adminTopics`) | `TOPIC_AUTHORIZATION_FAILED` (29) |
+| Fetch | `ReadData` on every topic (`topics`, `readTopics`) | `TOPIC_AUTHORIZATION_FAILED` (29) |
+| FindCoordinator, group | `Group` (`groups`) | `GROUP_AUTHORIZATION_FAILED` (30) |
+| FindCoordinator, transaction | `TransactionalId` (`transactionalIds`) | `TRANSACTIONAL_ID_AUTHORIZATION_FAILED` (53) |
+
+Every group and transaction operation starts with FindCoordinator, so that one
+check covers joins, offset commits and transactional producers. A denial is
+answered by the proxy itself, in order with the broker's other responses, so
+the client reports the missing grant by name; the server log names the
+service, action and resource.
+
+Two things to know:
+
+- **One denied topic refuses the whole request.** A Produce or Fetch that
+  names an allowed and a denied topic gets error 29 for every topic in it,
+  because splitting a request between broker and proxy would mean re-encoding
+  both. A service only meets this when it already touches a topic its spec
+  does not grant.
+- **Clients are held to classic protocol versions** for these three requests
+  (Produce v8, Fetch v11, FindCoordinator v2 — the last before Kafka's
+  "flexible" encoding), via the ApiVersions reply. Every current client and
+  broker supports them.
