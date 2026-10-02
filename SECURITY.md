@@ -35,6 +35,34 @@ real data.
 
 Only the latest release receives fixes.
 
+## Verifying a release
+
+Releases from `v0.0.1` on are signed with [cosign](https://github.com/sigstore/cosign)
+keyless signing: the signature is tied to the GitHub Actions workflow that
+built the release, not to a key someone could leak. (`v0.0.0` predates
+signing.)
+
+**Downloads.** `checksums.txt` is signed; it lists the digest of every archive.
+Verify the signature, then the archives against it:
+
+```sh
+VERSION=v0.0.1
+cosign verify-blob \
+  --certificate-identity "https://github.com/blairham/localiam/.github/workflows/goreleaser.yml@refs/tags/$VERSION" \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  --bundle checksums.txt.sigstore.json checksums.txt
+sha256sum --check --ignore-missing checksums.txt
+```
+
+**Images.** Each published image is signed by digest:
+
+```sh
+cosign verify ghcr.io/blairham/localiam:0.0.1 \
+  --certificate-identity-regexp '^https://github\.com/blairham/localiam/\.github/workflows/goreleaser\.yml@refs/tags/v' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+```
+
+
 ## Reporting a vulnerability
 
 **Do not open a public issue.** Report it privately through GitHub:
