@@ -60,6 +60,13 @@ func (v localVerifier) VerifyElastiCache(
 	return identityOf(res), nil
 }
 
+// AuthorizeKafka answers the Kafka proxy's per-operation questions through
+// the server's own Authorize — the path POST /v1/authorize takes.
+func (v localVerifier) AuthorizeKafka(ctx context.Context, service, action, resource string) (bool, error) {
+	allowed, _, err := v.srv.Authorize(ctx, service, action, resource)
+	return allowed, err
+}
+
 func identityOf(res verify.Result) proxy.Identity {
 	return proxy.Identity{
 		Service:     res.Service,

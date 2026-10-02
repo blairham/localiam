@@ -116,10 +116,17 @@ func runProxy(args []string) error {
 	return <-errCh
 }
 
+// kafkaGate is what the Kafka terminator needs from its verifier: authenticate
+// the SASL token, then authorize each topic, group and transactional id.
+type kafkaGate interface {
+	proxy.KafkaVerifier
+	proxy.KafkaAuthorizer
+}
+
 // newKafkaProxy builds the Kafka terminator, loading an operator-supplied
 // keypair when one is named. Split out of runProxy purely for length.
 func newKafkaProxy(
-	v proxy.KafkaVerifier, listen, backend, host, certFile, keyFile string,
+	v kafkaGate, listen, backend, host, certFile, keyFile string,
 ) (*proxy.Kafka, error) {
 	var tlsCfg *tls.Config
 	if certFile != "" {
@@ -130,6 +137,6 @@ func newKafkaProxy(
 		tlsCfg = &tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{cert}}
 	}
 	return proxy.NewKafka(proxy.KafkaOptions{
-		Verify: v, Listen: listen, Backend: backend, TLS: tlsCfg, Host: host,
+		Verify: v, Authorize: v, Listen: listen, Backend: backend, TLS: tlsCfg, Host: host,
 	})
 }

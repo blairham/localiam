@@ -98,8 +98,9 @@ Actions are the bare names above, not `kafka-cluster:ReadData`. Answers
 or no specs are loaded at all (then everything is allowed). An unknown action
 is a `400`.
 
-⚠ Nothing in localiam calls this endpoint yet — the Kafka proxy does not
-enforce per-topic policy. See [Policy](policy.md#what-is-enforced-where).
+The Kafka proxy calls it for every topic, group and transactional id a request
+names (once per connection per answer). See
+[Policy](policy.md#kafka-per-operation).
 
 ## `POST /debug/sh`
 

@@ -61,9 +61,12 @@ store. Generate a CA with `localiam gen-certs`, give the proxy `server.pem` /
 `server-key.pem`, and point clients' `SSL_CERT_FILE` at `ca.pem`. The
 certificate's `-hosts` must include the name clients dial.
 
-**Kafka clients can read topics their spec does not grant.** Known gap: the
-Kafka proxy does not enforce per-topic policy yet. See
-[Policy](reference/policy.md#what-is-enforced-where).
+**`TOPIC_AUTHORIZATION_FAILED`, `GROUP_AUTHORIZATION_FAILED` or
+`TRANSACTIONAL_ID_AUTHORIZATION_FAILED` from Kafka.** The service's spec does
+not grant that topic, group or transactional id; the server log line
+`kafka operation denied` names which. A request that mixes an allowed and a
+denied topic fails for every topic in it. See
+[Policy](reference/policy.md#kafka-per-operation).
 
 ## Looking inside a running pod
 

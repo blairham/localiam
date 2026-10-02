@@ -127,3 +127,38 @@ func (v *Verifier) call(
 		ExpiresAt:   out.ExpiresAt,
 	}, nil
 }
+
+// AuthorizeKafka asks the remote server one per-operation Kafka policy
+// question (POST /v1/authorize), so a `localiam proxy` sidecar enforces the
+// same per-topic, group and transactional-id grants as the server.
+func (v *Verifier) AuthorizeKafka(ctx context.Context, service, action, resource string) (bool, error) {
+	body, err := json.Marshal(server.AuthorizeRequest{Service: service, Action: action, Resource: resource})
+	if err != nil {
+		return false, fmt.Errorf("localiam client: marshaling request: %w", err)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, v.baseURL+server.PathAuthorize, bytes.NewReader(body))
+	if err != nil {
+		return false, fmt.Errorf("localiam client: building request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := v.http.Do(req)
+	if err != nil {
+		// Fail closed: an unreachable server must deny, never allow.
+		return false, fmt.Errorf("localiam client: authorizer unreachable: %w", err)
+	}
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			slog.Debug("localiam client: closing response", "error", closeErr)
+		}
+	}()
+	if resp.StatusCode != http.StatusOK {
+		return false, fmt.Errorf("localiam client: authorizer returned %s", resp.Status)
+	}
+	var out struct {
+		Allowed bool `json:"allowed"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return false, fmt.Errorf("localiam client: decoding response: %w", err)
+	}
+	return out.Allowed, nil
+}
