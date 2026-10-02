@@ -102,6 +102,29 @@ dockers_v2:
 checksum:
   name_template: 'checksums.txt'
 
+# Keyless cosign signatures, from the release workflow's own GitHub identity:
+# no key to store or leak, and the certificate names the exact workflow and tag
+# that produced the release. Signing checksums.txt covers every archive, since
+# it lists each one's digest. See SECURITY.md for how to verify.
+signs:
+  - cmd: cosign
+    signature: "${artifact}.sigstore.json"
+    args:
+      - sign-blob
+      - "--bundle=${signature}"
+      - "${artifact}"
+      - "--yes"
+    artifacts: checksum
+
+# Each published image, by digest. The default `artifacts` is the images
+# dockers_v2 built. cosign attaches the signature to the image in ghcr.io.
+docker_signs:
+  - cmd: cosign
+    args:
+      - sign
+      - "${artifact}@${digest}"
+      - "--yes"
+
 snapshot:
   version_template: "{{ incpatch .Version }}-next"
 

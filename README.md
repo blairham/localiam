@@ -145,6 +145,9 @@ Report vulnerabilities privately, never in a public issue — see
 [SECURITY.md](SECURITY.md). A token the verifier should have rejected is a
 vulnerability.
 
+Releases are signed with cosign — see
+[Verifying a release](SECURITY.md#verifying-a-release).
+
 ## License
 
 [Apache License 2.0](LICENSE). See [NOTICE](NOTICE).
