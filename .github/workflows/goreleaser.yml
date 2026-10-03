@@ -29,6 +29,8 @@ jobs:
       # Keyless cosign: the OIDC token is the signing identity — see signs and
       # docker_signs in .goreleaser.yaml.
       id-token: write
+      # SLSA build provenance for the archives — see "Attest build provenance".
+      attestations: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -89,3 +91,26 @@ jobs:
           MACOS_NOTARY_ISSUER_ID: ${{ secrets.MACOS_NOTARY_ISSUER_ID }}
           MACOS_NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
           MACOS_NOTARY_KEY: ${{ secrets.MACOS_NOTARY_KEY }}
+
+      # SLSA build provenance for every archive, signed through the same OIDC
+      # identity as the cosign signatures and recorded in GitHub's attestation
+      # store, so `gh attestation verify <archive> --repo blairham/localiam`
+      # works. checksums.txt names every archive by digest, so one statement
+      # covers them all.
+      - name: Attest build provenance
+        id: attest
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-checksums: dist/checksums.txt
+
+      # The same bundle as a release asset. OpenSSF Scorecard's Signed-Releases
+      # check finds provenance by an .intoto.jsonl asset on the release; it does
+      # not read the attestation store. jq -c makes the bundle one JSON line.
+      - name: Upload provenance to the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BUNDLE: ${{ steps.attest.outputs.bundle-path }}
+          TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          jq -c . "$BUNDLE" > localiam.intoto.jsonl
+          gh release upload "$TAG" localiam.intoto.jsonl --clobber
