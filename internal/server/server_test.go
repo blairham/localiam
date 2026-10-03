@@ -246,18 +246,17 @@ func TestAnUnregisteredCredentialIsRejected(t *testing.T) {
 	}
 }
 
-// TestAnEmptyRegistrationTokenIsRefused pins the fail-closed default: a server
-// with no registration token would let anyone who can reach it plant
-// credentials that then verify, so it refuses to start unless open
-// registration is asked for by name.
+// TestAnEmptyRegistrationTokenIsRefused pins that there is no open mode: a
+// server with no registration token would let anyone who can reach it plant
+// credentials that then verify, so it refuses to start at all.
 func TestAnEmptyRegistrationTokenIsRefused(t *testing.T) {
 	t.Parallel()
 	opts := server.Options{Store: verify.NewStore(), Region: region}
 	if _, err := server.New(opts); err == nil {
 		t.Fatal("server.New accepted an empty registration token")
 	}
-	opts.OpenRegistration = true
+	opts.Token = "set"
 	if _, err := server.New(opts); err != nil {
-		t.Fatalf("server.New refused OpenRegistration: %v", err)
+		t.Fatalf("server.New refused a set token: %v", err)
 	}
 }

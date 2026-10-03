@@ -78,23 +78,22 @@ func identityOf(res verify.Result) proxy.Identity {
 
 // serverFlags is everything `localiam server` is configured with.
 type serverFlags struct {
-	redisBackend     string
-	listen           string
-	pgBackend        string
-	specs            string
-	token            string
-	principals       string
-	redisListen      string
-	region           string
-	pgListen         string
-	redisGroup       string
-	kafkaCert        string
-	pgHost           string
-	kafkaKey         string
-	kafkaListen      string
-	kafkaBackend     string
-	pgPort           int
-	openRegistration bool
+	redisBackend string
+	listen       string
+	pgBackend    string
+	specs        string
+	token        string
+	principals   string
+	redisListen  string
+	region       string
+	pgListen     string
+	redisGroup   string
+	kafkaCert    string
+	pgHost       string
+	kafkaKey     string
+	kafkaListen  string
+	kafkaBackend string
+	pgPort       int
 }
 
 func parseServerFlags(args []string) (serverFlags, error) {
@@ -108,10 +107,8 @@ func parseServerFlags(args []string) (serverFlags, error) {
 		&f.token,
 		"token",
 		"",
-		"bearer token agents must present to register (required unless -open-registration)",
+		"bearer token agents must present to register (required)",
 	)
-	fs.BoolVar(&f.openRegistration, "open-registration", false,
-		"accept registrations with no -token; anyone who can reach the port can then plant credentials")
 	fs.StringVar(&f.principals, "principals", "",
 		"JSON file of bootstrap principals to preload (see verify.LoadStore)")
 
@@ -179,15 +176,14 @@ func runServer(args []string) error {
 		return err
 	}
 
-	if f.token == "" && !f.openRegistration {
-		return errors.New("server: -token is required; pass -open-registration to accept registrations from anyone")
-	}
-	if f.openRegistration && f.token == "" {
-		slog.Warn("localiam: registration is OPEN — anyone who can reach this port can register credentials")
+	if f.token == "" {
+		return errors.New(
+			"server: -token is required (the Helm chart generates one; on a laptop any value works, e.g. -token dev)",
+		)
 	}
 
 	srv, err := server.New(
-		server.Options{Store: store, Specs: loaded, Token: f.token, Region: f.region, OpenRegistration: f.openRegistration},
+		server.Options{Store: store, Specs: loaded, Token: f.token, Region: f.region},
 	)
 	if err != nil {
 		return err

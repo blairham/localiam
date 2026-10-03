@@ -19,8 +19,7 @@ malformed; `401` means a registration without the right bearer token.
 ## `POST /v1/credentials/register`
 
 Called by the agent for every credential it issues. Requires
-`Authorization: Bearer <-token>`; `401` otherwise. Only a server started with
-`-open-registration` accepts registrations without it.
+`Authorization: Bearer <-token>`; `401` otherwise.
 
 ```json
 {

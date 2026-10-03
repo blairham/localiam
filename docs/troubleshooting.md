@@ -28,8 +28,9 @@ reason, the client does not.
 
 **`server: -token is required`.** The server refuses to start without a
 registration token, because an open registration endpoint lets anyone who can
-reach it plant credentials. Pass `-token` (the Helm chart generates one), or
-`-open-registration` for a throwaway laptop run.
+reach it plant credentials. Pass `-token` — the Helm chart generates one, and
+on a laptop any value works (`-token dev`) as long as the agent's
+`-register-token` matches.
 
 **The SDK will not use the agent.** It refuses
 `AWS_CONTAINER_CREDENTIALS_FULL_URI` over plain HTTP unless the host is

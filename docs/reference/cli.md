@@ -54,7 +54,6 @@ The central verifier: holds every registered credential and answers the
 | `-listen` | | `:8080` | Address for the HTTP API. |
 | `-region` | | `us-east-1` | AWS region tokens must be scoped to. |
 | `-token` | | | Bearer token agents must present to register. **Required** — the server refuses to start without one. |
-| `-open-registration` | | `false` | Start without `-token` and accept registrations from anyone who can reach the port. For a throwaway laptop run only; the server warns when it is on. |
 | `-specs` | | | Directory of service spec `*.yaml` files to enforce. Empty means authenticate only, never authorize. See [Policy](policy.md). |
 | `-principals` | | | JSON file of bootstrap principals to preload — for init containers that run before any sidecar is up. See [Bootstrap principals](#bootstrap-principals). |
 | `-redis-proxy-listen` | | | Also run the Redis proxy here, e.g. `:6379`. Empty disables it. |
