@@ -204,7 +204,7 @@ func (p *Kafka) step(ctx context.Context, client, backend net.Conn) (Identity, b
 		return Identity{}, false, err
 	}
 
-	switch hdr.apiKey {
+	switch hdr.api {
 	case apiKeyAPIVersions:
 		// Forwarded so the client learns what the REAL broker supports — then
 		// the two SASL entries are clamped on the way back.
@@ -217,7 +217,7 @@ func (p *Kafka) step(ctx context.Context, client, backend net.Conn) (Identity, b
 		// Kafka refuses non-SASL requests before authentication; so do we, by
 		// closing. Forwarding would make the proxy a bypass.
 		p.log.Info("localiam: kafka request before authentication",
-			"apiKey", hdr.apiKey, "remote", client.RemoteAddr().String())
+			"api", hdr.api, "remote", client.RemoteAddr().String())
 		return Identity{}, false, errors.New("proxy: request before authentication")
 	}
 }
@@ -225,7 +225,7 @@ func (p *Kafka) step(ctx context.Context, client, backend net.Conn) (Identity, b
 // requestHeader is what the proxy needs from a Kafka request header.
 type requestHeader struct {
 	body        []byte // after the header
-	apiKey      int16
+	api         int16  // Kafka's "API key": the request type, not a credential
 	apiVersion  int16
 	correlation int32
 }
@@ -239,7 +239,7 @@ func parseRequestHeader(frame []byte) (requestHeader, error) {
 		return requestHeader{}, errors.New("proxy: short request header")
 	}
 	h := requestHeader{
-		apiKey:      int16(binary.BigEndian.Uint16(frame[0:2])),
+		api:         int16(binary.BigEndian.Uint16(frame[0:2])),
 		apiVersion:  int16(binary.BigEndian.Uint16(frame[2:4])),
 		correlation: int32(binary.BigEndian.Uint32(frame[4:8])),
 	}
@@ -257,7 +257,7 @@ func parseRequestHeader(frame []byte) (requestHeader, error) {
 	}
 	// Flexible request versions carry a tagged-field block here. Only
 	// ApiVersions v3+ is flexible by the time it reaches this proxy.
-	if h.apiKey == apiKeyAPIVersions && h.apiVersion >= 3 {
+	if h.api == apiKeyAPIVersions && h.apiVersion >= 3 {
 		if len(frame) > off {
 			off++ // an empty tagged-field block is a single zero byte
 		}
