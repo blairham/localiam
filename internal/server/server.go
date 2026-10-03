@@ -21,11 +21,13 @@ package server
 
 import (
 	"context"
+	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/blairham/localiam/internal/policy"
@@ -103,13 +105,25 @@ func (s *Server) Handler() http.Handler {
 	return mux
 }
 
+// registrationAuthorized reports whether r carries the registration token. The
+// compare is constant-time, as the agent's and the shell's are: whoever holds
+// this token can plant credentials every proxy then accepts, so it must not
+// leak a byte at a time through how long a wrong guess takes to refuse.
+func (s *Server) registrationAuthorized(r *http.Request) bool {
+	got, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
+	if !ok {
+		return false
+	}
+	return subtle.ConstantTimeCompare([]byte(got), []byte(s.opts.Token)) == 1
+}
+
 // RegisterRequest is what a sidecar pushes on each mint.
 type RegisterRequest struct {
 	Principal verify.Principal `json:"principal"`
 }
 
 func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
-	if s.opts.Token != "" && r.Header.Get("Authorization") != "Bearer "+s.opts.Token {
+	if s.opts.Token != "" && !s.registrationAuthorized(r) {
 		writeErr(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}

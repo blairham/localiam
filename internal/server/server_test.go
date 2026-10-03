@@ -206,11 +206,25 @@ func TestRegistrationRequiresTheToken(t *testing.T) {
 	t.Parallel()
 	base := harness(t, apiSpec())
 
-	status, _ := post(t, base+server.PathRegister, "wrong-token", server.RegisterRequest{
-		Principal: verify.Principal{AccessKeyID: accessKey, SecretKey: secretKey},
-	})
-	if status != http.StatusUnauthorized {
-		t.Errorf("status = %d, want 401", status)
+	// Every near miss is refused — a prefix or an extension of the real token
+	// as much as a wrong one — and only the exact token is let in.
+	cases := []struct {
+		name, token string
+		want        int
+	}{
+		{"none", "", http.StatusUnauthorized},
+		{"wrong", "wrong-token", http.StatusUnauthorized},
+		{"prefix", regToken[:len(regToken)-1], http.StatusUnauthorized},
+		{"extended", regToken + "x", http.StatusUnauthorized},
+		{"exact", regToken, http.StatusOK},
+	}
+	for _, c := range cases {
+		status, _ := post(t, base+server.PathRegister, c.token, server.RegisterRequest{
+			Principal: verify.Principal{AccessKeyID: accessKey, SecretKey: secretKey},
+		})
+		if status != c.want {
+			t.Errorf("%s: status = %d, want %d", c.name, status, c.want)
+		}
 	}
 }
 
