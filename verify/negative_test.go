@@ -129,6 +129,24 @@ func TestVerifyRejections(t *testing.T) {
 			want:  verify.ErrSessionMismatch,
 		},
 		{
+			name: "a session principal presented another session token",
+			token: presign(t, cacheGroup, "elasticache", url.Values{
+				"Action": {"connect"}, "User": {cacheUser},
+				"X-Amz-Security-Token": {"not-the-issued-session-token"},
+			}, frozen),
+			store: sessionStore,
+			want:  verify.ErrSessionMismatch,
+		},
+		{
+			name: "a session principal presented a prefix of its session token",
+			token: presign(t, cacheGroup, "elasticache", url.Values{
+				"Action": {"connect"}, "User": {cacheUser},
+				"X-Amz-Security-Token": {"the-issued-session"},
+			}, frozen),
+			store: sessionStore,
+			want:  verify.ErrSessionMismatch,
+		},
+		{
 			name:  "the token carries no signature at all",
 			token: cacheGroup + "/?Action=connect",
 			want:  verify.ErrMalformed,
@@ -196,5 +214,26 @@ func TestMSKAWSMSKIAMRejectsAnUnknownField(t *testing.T) {
 		`"x-amz-signature":"00","surprise":"value"}`)
 	if _, err := verify.MSKAWSMSKIAM(payload, testRegion, "", testStore(t), frozen); !errors.Is(err, verify.ErrMalformed) {
 		t.Errorf("got %v, want ErrMalformed", err)
+	}
+}
+
+// TestASessionPrincipalAcceptsItsOwnSessionToken is the positive half of the
+// session-mismatch rejections: the token the STS shim issued still verifies.
+func TestASessionPrincipalAcceptsItsOwnSessionToken(t *testing.T) {
+	t.Parallel()
+	store := verify.NewStore()
+	store.Add(verify.Principal{
+		AccessKeyID:  testAccessKey,
+		SecretKey:    testSecretKey,
+		SessionToken: "the-issued-session-token",
+		ARN:          testARN,
+	})
+	token := presign(t, cacheGroup, "elasticache", url.Values{
+		"Action": {"connect"}, "User": {cacheUser},
+		"X-Amz-Security-Token": {"the-issued-session-token"},
+	}, frozen)
+
+	if _, err := verify.ElastiCache(token, cacheGroup, cacheUser, testRegion, store, frozen.Add(time.Minute)); err != nil {
+		t.Fatalf("the issued session token was rejected: %v", err)
 	}
 }

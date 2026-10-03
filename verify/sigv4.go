@@ -252,7 +252,10 @@ func Verify(p Presigned, exp Expectation, store *Store, now time.Time) (Result, 
 	// Without this check a leaked long-lived key could be replayed as a session
 	// principal, and more usefully for a cluster: it proves the workload is using
 	// the credential the STS shim actually handed it.
-	if principal.SessionToken != "" && p.Query.Get(paramSecurityToken) != principal.SessionToken {
+	// Constant-time, like the signature below: hmac.Equal rather than
+	// crypto/subtle only to keep this package's imports where they were.
+	if principal.SessionToken != "" &&
+		!hmac.Equal([]byte(p.Query.Get(paramSecurityToken)), []byte(principal.SessionToken)) {
 		return Result{}, ErrSessionMismatch
 	}
 
