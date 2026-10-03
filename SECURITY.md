@@ -54,6 +54,15 @@ cosign verify-blob \
 sha256sum --check --ignore-missing checksums.txt
 ```
 
+**Build provenance.** Releases after `v0.0.1` also carry SLSA build provenance
+for every archive — which workflow run, commit and tag produced it. It is in
+GitHub's attestation store and attached to the release as
+`localiam.intoto.jsonl`:
+
+```sh
+gh attestation verify localiam_Linux_x86_64.tar.gz --repo blairham/localiam
+```
+
 **Images.** Each published image is signed by digest:
 
 ```sh
