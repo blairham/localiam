@@ -13,9 +13,9 @@ It is **not** an authentication system for anything you care about:
   without `-token-file`, the agent accepts any non-empty Authorization
   header.
 - The central server keeps every issued secret key in memory. Its
-  registration endpoint is protected by one shared bearer token (`-token`,
-  required unless `-open-registration` is passed — then anyone who can reach
-  the port can register credentials).
+  registration endpoint is protected by one shared bearer token (`-token`),
+  which is always required: there is no mode that accepts registrations
+  without it.
 - The proxies splice traffic to backends that run with authentication
   **disabled** (`POSTGRES_HOST_AUTH_METHOD=trust`, a password-less Redis,
   a PLAINTEXT Kafka listener). The backends must never be reachable except

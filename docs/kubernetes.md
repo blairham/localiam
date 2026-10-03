@@ -196,8 +196,8 @@ The proxy enforces each service's topics, groups and transactional ids; see
 localiam is a test tool — read [SECURITY.md](../SECURITY.md). If the cluster is
 shared:
 
-- Never pass `-open-registration`: the server requires `-token` otherwise, and
-  the chart generates one.
+- Keep the registration token secret: the server always requires `-token`,
+  and the chart generates a random one into a Secret.
 - Add a NetworkPolicy that lets only workload pods (agents) and store pods
   (proxies) reach the server, and only the proxies reach the stores' loopback
   ports — which they are, if the stores bind `127.0.0.1`.

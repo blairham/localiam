@@ -52,14 +52,11 @@ type Options struct {
 	Specs  map[string]*policy.Spec
 	Now    func() time.Time
 	Logger *slog.Logger
-	// Token is the bearer token agents must present to register. Empty is
-	// refused unless OpenRegistration is set: anyone who can reach an open
-	// registration endpoint can plant credentials that then verify.
+	// Token is the bearer token agents must present to register. It is
+	// required: anyone who can reach a registration endpoint without one can
+	// plant credentials that then verify, and there is no mode that allows it.
 	Token  string
 	Region string
-	// OpenRegistration accepts registrations with no token. It exists for a
-	// throwaway laptop run, and it has to be asked for by name.
-	OpenRegistration bool
 }
 
 // Server implements the localiam HTTP API.
@@ -77,8 +74,8 @@ func New(opts Options) (*Server, error) {
 	if opts.Region == "" {
 		return nil, errors.New("server: a Region is required")
 	}
-	if opts.Token == "" && !opts.OpenRegistration {
-		return nil, errors.New("server: a registration Token is required (or set OpenRegistration to accept anyone)")
+	if opts.Token == "" {
+		return nil, errors.New("server: a registration Token is required")
 	}
 	now := opts.Now
 	if now == nil {
@@ -111,7 +108,9 @@ func (s *Server) Handler() http.Handler {
 // leak a byte at a time through how long a wrong guess takes to refuse.
 func (s *Server) registrationAuthorized(r *http.Request) bool {
 	got, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
-	if !ok {
+	// New refuses an empty Token, but an empty one must never match an empty
+	// bearer here either, whatever path built the Server.
+	if !ok || got == "" || s.opts.Token == "" {
 		return false
 	}
 	return subtle.ConstantTimeCompare([]byte(got), []byte(s.opts.Token)) == 1
@@ -123,7 +122,7 @@ type RegisterRequest struct {
 }
 
 func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
-	if s.opts.Token != "" && !s.registrationAuthorized(r) {
+	if !s.registrationAuthorized(r) {
 		writeErr(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
