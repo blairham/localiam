@@ -35,6 +35,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"math"
 	"net/url"
 	"sort"
 	"strconv"
@@ -311,8 +312,8 @@ func validateWindow(
 			ErrWrongScope, cred.Date, signedAt.Format(dateFormat))
 	}
 
-	ttl, err := strconv.Atoi(q.Get(paramExpires))
-	if err != nil || ttl <= 0 {
+	ttl, err := parseExpires(q.Get(paramExpires))
+	if err != nil {
 		return time.Time{}, time.Time{}, fmt.Errorf("%w: %s %q", ErrMalformed, paramExpires, q.Get(paramExpires))
 	}
 	expiresAt = signedAt.Add(time.Duration(ttl) * time.Second)
@@ -327,6 +328,33 @@ func validateWindow(
 	}
 
 	return signedAt, expiresAt, nil
+}
+
+// parseExpires reads X-Amz-Expires as whole seconds, rounding a fractional
+// value DOWN.
+//
+// ⚠ A fractional value is a real client's output, not a malformed token:
+// aws-msk-iam-sasl-signer-js caps the lifetime at the credential's remaining
+// life, in seconds with a fraction — `X-Amz-Expires=869.667` — whenever that is
+// under 15 minutes. Under a Pod Identity agent issuing 15-minute credentials
+// that is EVERY token it mints, so rejecting it locked every Node MSK client
+// out of the cluster, while the same client signer is in production use against
+// MSK. The signature is computed over the raw query string, so accepting the
+// value changes no verification — only the window, and rounding down ends it
+// early rather than late.
+func parseExpires(v string) (int, error) {
+	if ttl, err := strconv.Atoi(v); err == nil {
+		if ttl <= 0 {
+			return 0, errors.New("non-positive")
+		}
+		return ttl, nil
+	}
+	f, err := strconv.ParseFloat(v, 64)
+	// The bounds also exclude NaN and the infinities, which ParseFloat accepts.
+	if err != nil || !(f >= 1 && f <= math.MaxInt32) {
+		return 0, errors.New("not a positive number of seconds")
+	}
+	return int(math.Floor(f)), nil
 }
 
 // credential is a parsed X-Amz-Credential value.
