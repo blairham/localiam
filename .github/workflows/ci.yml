@@ -39,7 +39,7 @@ jobs:
           # go-mod-tidy-repo resolves the whole graph; uncached it is slow and flaky.
           cache: true
       - name: Run pre-commit hooks
-        uses: blairham/go-pre-commit@5788df636d2726ba06d337393503a7fe6b3451c2 # v4.6.7
+        uses: blairham/go-pre-commit@b3deb289b038678e3b5af79e1442f71fc0f8a28c # v4.6.16
 
   # Gating happens inside the jobs, never with a workflow-level `paths:`
   # filter: a required check that never runs reports as *pending forever*
