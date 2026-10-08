@@ -202,7 +202,10 @@ formatters:
         - github.com/blairham/localiam
 
     gofumpt:
-      extra-rules: true
+      extra:
+        group-params: true
+        clothe-returns: true
+        balance-calls: true
 
     gci:
       sections:
