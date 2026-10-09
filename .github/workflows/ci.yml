@@ -4,9 +4,11 @@ name: CI
 # changed files, Build and test, Fuzz — are blairham/.github's go-ci.yml,
 # shared with every Go repository there; their checks report as
 # `CI / <job>`. The image build is its go-image.yml (`Image / Build image`).
-# Repository-specific jobs go below, `needs: ci`, with their steps gated on
-# `needs.ci.outputs.code == 'true'` (never a job-level `if:` or a `paths:`
-# filter: a required check that never runs is pending forever).
+# Repository-specific jobs go below, `needs: changes` (go-changes.yml, so
+# they need not wait for all of go-ci), with their steps gated on
+# `needs.changes.outputs.code == 'true'` or a narrower filter (never a
+# job-level `if:` or a `paths:` filter: a required check that never runs is
+# pending forever).
 on:
   pull_request:
     types: [opened, reopened, synchronize, ready_for_review]
@@ -36,17 +38,25 @@ jobs:
   # that it answers correctly under concurrent connections.
   ci:
     name: CI
-    uses: blairham/.github/.github/workflows/go-ci.yml@99060d62d0693570a360127ab698307d276630da # v0.0.0
+    uses: blairham/.github/.github/workflows/go-ci.yml@48d6c8f94aa8381c550818e0a0b2a0d61f280a6b # v0.0.2
+
+  # What changed, on its own, so the jobs below start as soon as the change is
+  # classified. `charts` is everything the Helm charts job reads.
+  changes:
+    name: Changes
+    uses: blairham/.github/.github/workflows/go-changes.yml@48d6c8f94aa8381c550818e0a0b2a0d61f280a6b # v0.0.2
+    with:
+      filters: '{"charts": ["^charts/", "^\\.github/workflows/ci\\.yml$"]}'
 
   # localiam is consumed as a CONTAINER (agent sidecar, proxy sidecar, server),
   # so a Dockerfile that stopped building would break every cluster while the
   # Go tests stayed green. Build only; a v* tag publishes (release.yml).
   image:
     name: Image
-    needs: ci
-    uses: blairham/.github/.github/workflows/go-image.yml@99060d62d0693570a360127ab698307d276630da # v0.0.0
+    needs: changes
+    uses: blairham/.github/.github/workflows/go-image.yml@48d6c8f94aa8381c550818e0a0b2a0d61f280a6b # v0.0.2
     with:
-      run: ${{ needs.ci.outputs.code == 'true' }}
+      run: ${{ needs.changes.outputs.code == 'true' }}
 
   # The charts are part of the product: a template error ships as a failed
   # install on someone else's cluster. Lint both, and render the server chart
@@ -54,18 +64,18 @@ jobs:
   # is exercised too.
   charts:
     name: Helm charts
-    needs: ci
+    needs: changes
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        if: needs.ci.outputs.code == 'true'
+        if: fromJSON(needs.changes.outputs.matches).charts == 'true'
       - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
-        if: needs.ci.outputs.code == 'true'
+        if: fromJSON(needs.changes.outputs.matches).charts == 'true'
       - name: Lint
-        if: needs.ci.outputs.code == 'true'
+        if: fromJSON(needs.changes.outputs.matches).charts == 'true'
         run: helm lint charts/localiam charts/localiam-sidecar
       - name: Render with every option on
-        if: needs.ci.outputs.code == 'true'
+        if: fromJSON(needs.changes.outputs.matches).charts == 'true'
         run: |
           helm template ci charts/localiam \
             --set registration.token=ci \
