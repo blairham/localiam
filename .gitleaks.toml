@@ -1,14 +1,9 @@
-# gitleaks configuration for localiam.
+# gitleaks configuration for localiam: the default rules.
 #
-# The test suite's golden vectors are signed with AWS's PUBLISHED SigV4 example
-# credentials — the ones printed in AWS's own signing documentation. They are
-# deliberately used instead of anything minted against a real account, so a
-# committed golden vector carries no real secret. gitleaks cannot tell the
-# difference by shape, so they are allowlisted by exact value.
-#
-# ⚠ Allowlist the EXACT example strings, never a broad pattern like
-# `AKIA[A-Z0-9]{16}` — a wildcard here would silence the rule that exists to
-# catch a genuine key pasted into a test.
+# Rendered from blairham/.github baseline/gitleaks.toml.tmpl by `make sync`.
+# An allowlist entry is an override (overrides/localiam.yml) and carries the
+# reason it is not a secret. Allowlist exact values, never a broad pattern: a
+# wildcard silences the rule that exists to catch a genuine key.
 
 [extend]
 useDefault = true

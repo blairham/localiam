@@ -42,35 +42,62 @@ keyless signing: the signature is tied to the GitHub Actions workflow that
 built the release, not to a key someone could leak. (`v0.0.0` predates
 signing.)
 
+Each tag's release is built by `.github/workflows/release.yml`, which runs the
+shared release workflow in [blairham/.github](https://github.com/blairham/.github)
+(`.github/workflows/go-release.yml`). The signing identity is that shared
+workflow; the certificate also names this repository and the tag, and the
+verify commands below check all three.
+
 **Downloads.** `checksums.txt` is signed; it lists the digest of every archive.
 Verify the signature, then the archives against it:
 
 ```sh
-VERSION=v0.0.1
+VERSION=v0.0.5
 cosign verify-blob \
-  --certificate-identity "https://github.com/blairham/localiam/.github/workflows/goreleaser.yml@refs/tags/$VERSION" \
+  --certificate-identity-regexp '^https://github\.com/blairham/\.github/\.github/workflows/go-release\.yml@' \
+  --certificate-github-workflow-repository blairham/localiam \
+  --certificate-github-workflow-ref "refs/tags/$VERSION" \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
   --bundle checksums.txt.sigstore.json checksums.txt
 sha256sum --check --ignore-missing checksums.txt
 ```
 
-**Build provenance.** Releases after `v0.0.1` also carry SLSA build provenance
-for every archive — which workflow run, commit and tag produced it. It is in
-GitHub's attestation store and attached to the release as
-`localiam.intoto.jsonl`:
+**Build provenance.** Every archive carries SLSA build provenance — which
+workflow run, commit and tag produced it. It is in GitHub's attestation store
+and attached to the release as `localiam-$VERSION.intoto.jsonl`:
 
 ```sh
-gh attestation verify localiam_Linux_x86_64.tar.gz --repo blairham/localiam
+gh attestation verify localiam_Linux_x86_64.tar.gz --repo blairham/localiam \
+  --signer-workflow blairham/.github/.github/workflows/go-release.yml
 ```
 
 **Images.** Each published image is signed by digest:
 
 ```sh
-cosign verify ghcr.io/blairham/localiam:0.0.1 \
-  --certificate-identity-regexp '^https://github\.com/blairham/localiam/\.github/workflows/goreleaser\.yml@refs/tags/v' \
+cosign verify "ghcr.io/blairham/localiam:${VERSION#v}" \
+  --certificate-identity-regexp '^https://github\.com/blairham/\.github/\.github/workflows/go-release\.yml@' \
+  --certificate-github-workflow-repository blairham/localiam \
+  --certificate-github-workflow-ref "refs/tags/$VERSION" \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 ```
 
+It also carries SLSA build provenance, stored in ghcr.io beside it and in the
+repository's attestations. The subject is the multi-arch index, so check it by
+tag (image tags carry no `v`):
+
+```sh
+gh attestation verify "oci://ghcr.io/blairham/localiam:${VERSION#v}" \
+  --repo blairham/localiam \
+  --signer-workflow blairham/.github/.github/workflows/go-release.yml
+```
+
+**Tags released before the move to blairham/.github** (v0.0.4 and earlier)
+were signed by this repository's own `goreleaser.yml`. Verify those with
+`--certificate-identity "https://github.com/blairham/localiam/.github/workflows/goreleaser.yml@refs/tags/$VERSION"`
+(for an image, `--certificate-identity-regexp '^https://github\.com/blairham/localiam/\.github/workflows/goreleaser\.yml@refs/tags/v'`)
+in place of the three identity flags above, and run `gh attestation verify`
+without `--signer-workflow`. Their archive provenance (after `v0.0.1`) is
+attached as `localiam.intoto.jsonl`, and their images carry no provenance.
 
 ## Reporting a vulnerability
 

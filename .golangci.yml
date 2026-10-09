@@ -1,6 +1,11 @@
 # golangci-lint v2 configuration for localiam.
 # See: https://golangci-lint.run/usage/configuration/
 #
+# Rendered from blairham/.github baseline/golangci.yml.tmpl by `make sync`.
+# Edit the baseline (or, with a reason, the override file
+# overrides/localiam.yml), not this file: the weekly drift check
+# reports any difference.
+#
 # golangci-lint is pinned twice and the two must move together: go.mod's `tool`
 # block (`go tool golangci-lint`) and the hook `rev` in .pre-commit-config.yaml.
 
@@ -22,13 +27,12 @@ output:
       colors: true
 
 linters:
-  # Every linter this repo runs is listed here. There is no relaxed set: the
-  # adoption-time `disable:` block and its burn-down (issue #2) are done, so a
-  # new finding is a real finding — fix it rather than re-adding a disable.
+  # The hook reports only what a commit introduces, so an older finding surfaces
+  # when its lines are next touched: fix it then rather than adding a disable.
   enable:
     # Core linters (enabled by default)
     - errcheck # Check for unchecked errors
-    - govet # Suspicious constructs, incl. shadow + fieldalignment (see settings)
+    - govet # Suspicious constructs; the analyzers are in settings
     - ineffassign # Detect ineffectual assignments
     - staticcheck # The staticcheck rule set
     - unused # Check for unused constants, variables, functions and types
