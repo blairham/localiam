@@ -5,4 +5,4 @@
 # `check-go-version-sync` hook enforces both halves: a `golang` line outside
 # this file is rejected, and every module's `go` directive must equal this pin.
 # Move this pin and go.mod's `go` directive together.
-golang 1.26.8
+golang 1.26.9

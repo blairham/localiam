@@ -102,9 +102,9 @@ dockers_v2:
 checksum:
   name_template: 'checksums.txt'
 
-# Keyless cosign signatures, from the release workflow's own GitHub identity:
-# no key to store or leak, and the certificate names the exact workflow and tag
-# that produced the release. Signing checksums.txt covers every archive, since
+# Keyless cosign signatures, from the release workflow's GitHub identity
+# (blairham/.github's go-release.yml): no key to store or leak, and the
+# certificate names that workflow, this repository and the tag. Signing checksums.txt covers every archive, since
 # it lists each one's digest. See SECURITY.md for how to verify.
 signs:
   - cmd: cosign
@@ -128,6 +128,11 @@ docker_signs:
 snapshot:
   version_template: "{{ incpatch .Version }}-next"
 
+# The release notes are the tag's CHANGELOG.md section, passed by
+# blairham/.github's go-release.yml with --release-notes, which replaces this
+# generated list; the list is used only for tags from before CHANGELOG.md
+# existed. Do not set `changelog.disable`: it also skips the stage that loads
+# --release-notes, and the release would go out with empty notes.
 changelog:
   sort: asc
   use: github

@@ -1,4 +1,3 @@
-# Every change needs the maintainer's review; verify/ is where a mistake
-# becomes a token accepted that should not be.
-*        @blairham
-/verify/ @blairham
+# Every change needs the maintainer's review.
+# Rendered from blairham/.github baseline/CODEOWNERS.tmpl by `make sync`.
+*  @blairham

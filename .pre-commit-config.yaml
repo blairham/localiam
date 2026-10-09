@@ -2,46 +2,64 @@
 # Install: pre-commit install
 # Run:     pre-commit run --all-files
 # Update:  pre-commit autoupdate
+#
+# Rendered from blairham/.github baseline/pre-commit-config.yaml.tmpl by
+# `make sync`. Edit the baseline (or, with a reason, the override file
+# overrides/localiam.yml), not this file: the weekly drift check
+# reports any difference. No `repo: local` hooks, ever — upstream hooks with
+# an alias and args instead.
 
 repos:
   # General hygiene
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
     hooks:
+      # The two fixers rewrite in place, so generated files stay out of them.
       - id: trailing-whitespace
+        exclude: ^dist/
       - id: end-of-file-fixer
+        exclude: ^dist/
       - id: check-yaml
         args: ['--allow-multiple-documents']
         # Helm templates are Go templates until rendered; `helm lint` and the
-        # render in CI's charts job validate them.
+        # chart render in CI validate them.
         exclude: ^charts/[^/]+/templates/
       - id: check-added-large-files
         args: ['--maxkb=500']
       - id: detect-private-key
 
-  # golangci-lint at commit time, via the upstream hooks (no local scripts).
-  # `golangci-lint-fmt` runs the formatters configured in .golangci.yml
-  # (gofumpt, gci, golines); `golangci-lint` lints only what changed since HEAD.
-  # Keep this rev in lockstep with the golangci-lint version in go.mod's `tool`
-  # block (see .golangci.yml).
+  # golangci-lint via the upstream hooks. Keep `rev` in step with go.mod's
+  # `tool` block.
   - repo: https://github.com/golangci/golangci-lint
     rev: v2.14.0
     hooks:
+      # Runs the formatters configured in .golangci.yml.
       - id: golangci-lint-fmt
+      # `--new-from-rev HEAD`: reports what you just wrote, not the backlog.
       - id: golangci-lint
 
-  # Secret scanning. Allowlist for the AWS published example creds lives in
-  # .gitleaks.toml — read the warning there before widening it.
+      # The same hook, asked the question a CI runner can answer. On a clean
+      # checkout `--new-from-rev HEAD` compares the tree with an identical
+      # HEAD and reports nothing; `--new-from-merge-base` overrides it.
+      # `--fix=false` overrides the entry's `--fix`: a linter that repairs its
+      # own findings on the runner exits 0 over still-broken committed code,
+      # and pre-commit's "files were modified" net cannot see it because the
+      # hook is `pass_filenames: false`. Manual stage: CI asks for it by name
+      # (blairham/.github go-ci.yml); it never runs on a local commit.
+      - id: golangci-lint
+        alias: golangci-lint-new
+        name: golangci-lint (issues this change introduces)
+        stages: [manual]
+        args: [--new-from-merge-base=origin/main, --fix=false]
+
   # Go housekeeping.
   - repo: https://github.com/TekWizely/pre-commit-golang
     rev: v1.0.0-rc.4
     hooks:
       - id: go-mod-tidy-repo
 
-  # One golang pin per repo, at the root, that every go.mod must match: CI reads
-  # go-version-file: go.mod, so without this the two could build different Go
-  # with nothing noticing. check-conflict-markers replaces upstream's
-  # check-merge-conflict, which misses a committed diff3 base marker.
+  # go.mod and .tool-versions must pin the same Go. check-conflict-markers
+  # replaces upstream's check-merge-conflict, which misses diff3 base markers.
   - repo: https://github.com/blairham/pre-commit-hooks
     rev: v0.4.0
     hooks:
@@ -54,10 +72,23 @@ repos:
       # Known-vulnerable dependencies fail the commit, not the release.
       - id: go-vulncheck
 
+  # US English over prose: golangci-lint's misspell reaches Go files and
+  # nothing else. Reports, never rewrites — unlike a formatter it can reach
+  # inside a string literal. `importas` is a linter's name, not a typo.
+  - repo: https://github.com/golangci/misspell
+    rev: v0.8.0
+    hooks:
+      - id: misspell
+        args: [-locale, US, -i, "importas", -error]
+        files: \.(md|ya?ml)$
+        exclude: ^dist/
+
+  # Secret scanning; the rules and any allowlist are in .gitleaks.toml.
   - repo: https://github.com/gitleaks/gitleaks
     rev: v8.30.1
     hooks:
       - id: gitleaks
+        exclude: ^dist/
 
   # YAML style (sequence indentation etc.; config in .yamllint.yml)
   - repo: https://github.com/adrienverge/yamllint

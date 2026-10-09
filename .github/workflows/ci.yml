@@ -1,8 +1,12 @@
 name: CI
 
-# One workflow holds everything that gates a merge, so there is one file to
-# read and one check to require. Splitting pre-commit or the tests into their
-# own workflow buys nothing and costs a second place to keep in sync.
+# Everything that gates a merge. The jobs themselves — Pre-commit, Detect
+# changed files, Build and test, Fuzz — are blairham/.github's go-ci.yml,
+# shared with every Go repository there; their checks report as
+# `CI / <job>`. The image build is its go-image.yml (`Image / Build image`).
+# Repository-specific jobs go below, `needs: ci`, with their steps gated on
+# `needs.ci.outputs.code == 'true'` (never a job-level `if:` or a `paths:`
+# filter: a required check that never runs is pending forever).
 on:
   pull_request:
     types: [opened, reopened, synchronize, ready_for_review]
@@ -12,6 +16,10 @@ on:
     # the merge result gets its own run rather than inheriting the branch's
     # green tick.
     branches: [main]
+  schedule:
+    # Weekly, for go-ci.yml's Fuzz job, which explores on main and on this
+    # schedule but never on a pull request.
+    - cron: '53 5 * * 3'
 
 permissions:
   contents: read
@@ -22,110 +30,23 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Pre-commit is the lint surface: the same pinned golangci hooks run locally
-  # as the commit gate and here as the merge gate. No standalone
-  # golangci-lint-action — a parallel lint config drifts. It is also the only
-  # job that looks at *every* file rather than at Go: trailing whitespace,
-  # secrets, conflict markers, the toolchain pin.
-  pre-commit:
-    name: Pre-commit
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: go.mod
-          check-latest: true
-          # go-mod-tidy-repo resolves the whole graph; uncached it is slow and flaky.
-          cache: true
-      - name: Run pre-commit hooks
-        uses: blairham/go-pre-commit@b3deb289b038678e3b5af79e1442f71fc0f8a28c # v4.6.16
-
-  # Gating happens inside the jobs, never with a workflow-level `paths:`
-  # filter: a required check that never runs reports as *pending forever*
-  # rather than as passed, which makes a docs-only pull request unmergeable.
-  # Anything unrecognised counts as code, so when this is wrong it is wrong in
-  # the direction of running the tests.
-  changes:
-    name: Detect changed files
-    needs: pre-commit
-    runs-on: ubuntu-latest
-    outputs:
-      code: ${{ steps.filter.outputs.code }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0 # the diff needs the base commit, not just HEAD
-      - id: filter
-        name: Is any of this code?
-        env:
-          # On a merge to main there is no pull request; `before` is the commit
-          # main pointed at, which makes the diff the merge itself.
-          BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
-        run: |
-          code=false
-          if [ "$GITHUB_EVENT_NAME" != pull_request ]; then
-            echo "push to $GITHUB_REF_NAME — running everything"
-            code=true
-          elif ! git cat-file -e "$BASE" 2>/dev/null; then
-            # No usable base commit — a force push, or a shallow fetch that did
-            # not reach it. `git diff` would fail here and print nothing, and an
-            # empty diff is indistinguishable from "only prose changed", so this
-            # would silently skip every test. The safe answer is to run them.
-            echo "base commit $BASE is not present — running everything"
-            code=true
-          else
-            while IFS= read -r f; do
-              [ -n "$f" ] || continue
-              case "$f" in
-                docs/*|*.md|LICENSE|LICENSE.*|*.png|*.jpg|*.gif|*.svg) ;; # prose
-                *) code=true; break ;;
-              esac
-            done <<<"$(git diff --name-only "$BASE"...HEAD)"
-          fi
-          echo "code=$code" >> "$GITHUB_OUTPUT"
-          echo "changed files are $([ "$code" = true ] && echo 'code — full run' || echo 'prose only — skipping the code jobs')"
-
-  test:
-    name: Build and test
-    needs: changes
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        if: needs.changes.outputs.code == 'true'
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        if: needs.changes.outputs.code == 'true'
-        with:
-          go-version-file: go.mod
-          check-latest: true
-          cache: true
-      - run: go build ./...
-        if: needs.changes.outputs.code == 'true'
-      # -race matters here more than in most repos: the credential store is
-      # written by the issuer while proxies read it, and the whole point of the
-      # component is that it answers correctly under concurrent connections.
-      - run: go test -race ./...
-        if: needs.changes.outputs.code == 'true'
+  # go-ci.yml's default test command is `go test -race ./...`. -race matters
+  # here more than in most repos: the credential store is written by the
+  # issuer while proxies read it, and the whole point of the component is
+  # that it answers correctly under concurrent connections.
+  ci:
+    name: CI
+    uses: blairham/.github/.github/workflows/go-ci.yml@99060d62d0693570a360127ab698307d276630da # v0.0.0
 
   # localiam is consumed as a CONTAINER (agent sidecar, proxy sidecar, server),
-  # so a Dockerfile that stopped building would break every cluster while the Go
-  # tests stayed green. Build only; a v* tag publishes (goreleaser.yml). No `if:`
-  # needed: a job that `needs` a skipped job is itself skipped.
+  # so a Dockerfile that stopped building would break every cluster while the
+  # Go tests stayed green. Build only; a v* tag publishes (release.yml).
   image:
-    name: Build image
-    needs: [changes, test]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        if: needs.changes.outputs.code == 'true'
-      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
-        if: needs.changes.outputs.code == 'true'
-      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
-        if: needs.changes.outputs.code == 'true'
-        with:
-          context: .
-          push: false
-          tags: localiam:ci
+    name: Image
+    needs: ci
+    uses: blairham/.github/.github/workflows/go-image.yml@99060d62d0693570a360127ab698307d276630da # v0.0.0
+    with:
+      run: ${{ needs.ci.outputs.code == 'true' }}
 
   # The charts are part of the product: a template error ships as a failed
   # install on someone else's cluster. Lint both, and render the server chart
@@ -133,18 +54,18 @@ jobs:
   # is exercised too.
   charts:
     name: Helm charts
-    needs: changes
+    needs: ci
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        if: needs.changes.outputs.code == 'true'
+        if: needs.ci.outputs.code == 'true'
       - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
-        if: needs.changes.outputs.code == 'true'
+        if: needs.ci.outputs.code == 'true'
       - name: Lint
-        if: needs.changes.outputs.code == 'true'
+        if: needs.ci.outputs.code == 'true'
         run: helm lint charts/localiam charts/localiam-sidecar
       - name: Render with every option on
-        if: needs.changes.outputs.code == 'true'
+        if: needs.ci.outputs.code == 'true'
         run: |
           helm template ci charts/localiam \
             --set registration.token=ci \

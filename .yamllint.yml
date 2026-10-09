@@ -1,13 +1,17 @@
 # yamllint configuration.
 #
-# Block sequences are indented under their parent key (`key:` then
-# `  - item`, parent+2) — the Kubernetes/Helm convention. Editor note:
-# VS Code's kubernetes-yaml-formatter v2 honors this via
-# `better-yaml.indentSeq: true`; Prettier dedents sequences and offers no
-# override, so keep *.yaml/*.yml out of Prettier format-on-save.
+# Rendered from blairham/.github baseline/yamllint.yml.tmpl by `make sync`.
 #
-# Enforced via pre-commit; run manually: yamllint .
+# Block sequences are indented under their parent key, the Kubernetes/Helm
+# convention. Prettier dedents them, so keep YAML out of format-on-save.
 extends: default
+
+# Helm templates are Go templates until rendered. yamllint wants `ignore` as a
+# block-scalar string (one gitignore-style pattern per line); a YAML list is
+# silently not applied. The pre-commit hook excludes them too, for runs that
+# pass file names explicitly.
+ignore: |
+  charts/*/templates/
 
 rules:
   indentation:
