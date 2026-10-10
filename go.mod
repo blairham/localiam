@@ -7,7 +7,7 @@ require (
 	github.com/aws/aws-sdk-go-v2 v1.47.1
 	github.com/aws/aws-sdk-go-v2/credentials v1.20.6
 	github.com/aws/aws-sdk-go-v2/feature/rds/auth v1.7.4
-	github.com/blairham/sh v0.0.20
+	github.com/blairham/sh v0.0.28
 	github.com/jackc/pgx/v5 v5.11.0
 	github.com/redis/go-redis/v9 v9.23.0
 	github.com/twmb/franz-go v1.22.1
