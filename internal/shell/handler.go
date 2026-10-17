@@ -12,10 +12,20 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/blairham/sh/gated"
 )
 
 // Path is where Handler expects to be mounted.
 const Path = "/debug/sh"
+
+// maxBody is gated's script cap, which is unexported there and so copied here.
+// The body is read through a limit one byte past it, so a script just over the
+// cap reaches gated.Shell.Run and is refused with gated's own error (a 400),
+// and anything larger is cut off with a 413 before it is buffered. If gated
+// changes its cap, change this with it; TestTheBodyCapAgreesWithGated fails if
+// they disagree.
+const maxBody = 8 << 10
 
 // runTimeout bounds one script. interp consults the context at every command,
 // so a runaway loop stops here rather than holding a goroutine forever.
@@ -23,8 +33,8 @@ const runTimeout = 5 * time.Second
 
 // Config is what the endpoint needs to exist.
 type Config struct {
-	// Policy overrides DefaultPolicy. Nil means the default.
-	Policy *Policy
+	// Policy overrides gated.DefaultPolicy. Nil means the default.
+	Policy *gated.Policy
 	// Log receives one line per run, so that the trail exists in the log
 	// pipeline even when nobody keeps the response body. Nil means
 	// slog.Default.
@@ -55,7 +65,7 @@ func Register(mux *http.ServeMux, cfg Config) bool {
 	h := &handler{
 		cfg:   cfg,
 		log:   log,
-		shell: &Shell{Policy: cfg.Policy, Session: cfg.Session},
+		shell: &gated.Shell{Policy: cfg.Policy, Session: cfg.Session},
 	}
 	mux.Handle("POST "+Path, h)
 	return true
@@ -63,7 +73,7 @@ func Register(mux *http.ServeMux, cfg Config) bool {
 
 type handler struct {
 	log   *slog.Logger
-	shell *Shell
+	shell *gated.Shell
 	cfg   Config
 }
 
@@ -75,7 +85,7 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	src, err := io.ReadAll(http.MaxBytesReader(w, req.Body, maxScript+1))
+	src, err := io.ReadAll(http.MaxBytesReader(w, req.Body, maxBody+1))
 	if err != nil {
 		http.Error(w, "script too large", http.StatusRequestEntityTooLarge)
 		return
@@ -111,7 +121,7 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		// values when that happens (it did, once, and stopped compiling).
 		h.encode(w, struct {
 			Error string `json:"error"`
-			Result
+			gated.Result
 		}{Result: res, Error: runErr.Error()})
 		return
 	}
