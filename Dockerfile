@@ -47,7 +47,7 @@ COPY ${TARGETOS}/${TARGETARCH}/localiam /usr/local/bin/localiam
 # /bin/sh is a GATED shell, not a general one: it cannot exec anything, ever,
 # and its reads are bounded to /proc and /sys/fs/cgroup, with /proc/*/environ
 # denied. That is what makes it a different decision from adding busybox. See
-# gated/README.md in github.com/blairham/sh, and internal/shell/README.md.
+# internal/shell/README.md.
 COPY ${TARGETOS}/${TARGETARCH}/sh /bin/sh
 
 # Default: built from source (`make image`, CI). Last, so a bare

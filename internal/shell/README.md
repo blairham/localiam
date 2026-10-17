@@ -1,72 +1,109 @@
-# `internal/shell`: the HTTP front end for the gated shell
+# `internal/shell`: a gated shell for the distroless image
 
 localiam's image is `gcr.io/distroless/static-debian12:nonroot`: no `/bin/sh`,
-no coreutils and no package manager. The gated shell that puts one back, a
-shell that **cannot execute anything** and whose reads are bounded to `/proc`
-and `/sys/fs/cgroup`, lives in
-[`github.com/blairham/sh/gated`](https://github.com/blairham/sh/tree/main/gated).
-**Its [README](https://github.com/blairham/sh/blob/main/gated/README.md) is the
-model**: what the gate refuses and why, the `environ` deny, the bounds, the
-diagnostic recipes, and the tests. It is not repeated here.
+no coreutils and no package manager, so `kubectl exec` has nothing to run and
+"exec in and look at `/proc`" is dead. This package puts a shell back as a Go
+library ([`github.com/blairham/sh`](https://github.com/blairham/sh), `dash`
+dialect) with a deny-by-default gate in front of every action it takes.
 
-localiam exposes it two ways, one gate:
+Two front ends, one gate:
 
 | Front end | Where | Reach it with |
 |---|---|---|
-| `/bin/sh` | `cmd/sh` (gated's `ExampleMain`), built and installed by the Dockerfile | `kubectl exec <pod> -- /bin/sh -c '<script>'` or `kubectl exec -i <pod> -- /bin/sh < probe.sh` |
-| `POST /debug/sh` | this package, mounted by `localiam server` only when `LOCALIAM_SHELL_TOKEN` is set | `curl -H "Authorization: Bearer $TOK" --data-binary @probe.sh localhost:8080/debug/sh` |
+| `POST /debug/sh` | `localiam server`, mounted only when `LOCALIAM_SHELL_TOKEN` is set | `curl -H "Authorization: Bearer $TOK" --data-binary @probe.sh localhost:8080/debug/sh` |
+| `/bin/sh` | `cmd/sh`, built and installed by the Dockerfile | `kubectl exec <pod> -- /bin/sh -c '<script>'` or `kubectl exec -i <pod> -- /bin/sh < probe.sh` |
 
-Both run `gated.Shell` with `gated.DefaultPolicy`, so there is one boundary to
-review and it is upstream. gated deliberately ships no network front end; this
-package is localiam's, and it is the only code here.
-
-## The endpoint
-
-- **Request:** the script is the POST body. Over gated's 8 KiB script cap is a
-  400 carrying gated's error; well over it is a 413 before the body is
-  buffered.
-- **Response:** `gated.Result` as JSON: `stdout`, `stderr`, `status`, the
-  `trail` of every action, allowed or refused, and the `denied` count. A parse
-  failure or a deadline is a 400 whose body is the same `Result` plus an
-  `error`, because the trail of whatever ran before it is still worth having.
-- **Deadline:** 5 seconds per run.
-- **Log:** one `shell: run` line per request with the session (`HOSTNAME`), the
-  byte count, status, record count, and the denial count, so the fact that
-  somebody ran something survives in the log pipeline even when nobody kept
-  the response body.
+Both build the same `Shell` with the same `Policy`, so there is one boundary to
+review.
 
 ## Operating it: what the deployment must get right
 
-gated's README lists what any deployment of the shell must get right (no other
-shell or userland in the image, no `exec` lifecycle hooks or probes). The
-endpoint adds these:
+The gate is only half the boundary. The other half is how it is exposed:
 
-1. **The token comes from a Secret, and an empty token unmounts the
-   endpoint.** `Register` mounts nothing without one, so a 404 is proof the
-   endpoint is off. Read it with `secretKeyRef.optional: true` so a missing
-   Secret leaves the endpoint off rather than failing the pod. The compare is
-   constant-time, and a refusal is a bare 403 with no `WWW-Authenticate`.
+1. **The image must have no other shell or userland.** Beside busybox, `ls`,
+   `wget` and the rest are still there to exec from anything that is not this
+   binary, so a gated `/bin/sh` protects nothing. The Dockerfile keeps it
+   distroless for that reason.
 2. **The endpoint shares the API port.** `localiam server` has one listener,
    so `/debug/sh` is on the same port agents register to. That is acceptable
    only because localiam runs on networks you control (see `SECURITY.md`);
    never route that port through an Ingress, and restrict it with a
    NetworkPolicy so the token is not the only control.
-3. **The token is in the pod's environment**, which is why gated's `environ`
-   deny matters here specifically: without it, one `read` of
-   `/proc/1/environ` through this endpoint would return the endpoint's own
-   token.
+3. **The token comes from a Secret, and an empty token unmounts the
+   endpoint.** `Register` mounts nothing without one, so a 404 is proof the
+   endpoint is off. Read it with `secretKeyRef.optional: true` so a missing
+   Secret leaves the endpoint off rather than failing the pod.
+4. **No `exec` lifecycle hooks.** A `preStop: exec: ["sleep", "5"]` needs a
+   `sleep` binary; distroless has none and this shell refuses exec anyway.
+   Use `preStop: sleep: {seconds: 5}` (Kubernetes >= 1.30).
 
 `/bin/sh` needs no token: it is reachable only by someone who can already
 `kubectl exec`, which is its own authorization.
 
+## What it can do
+
+Nothing external. The toolkit is shell builtins plus globbing plus
+redirection, pointed at `/proc` and `/sys/fs/cgroup`, which covers most of what
+anyone execs in to ask:
+
+```sh
+# ps, with no ps
+for d in /proc/[0-9]*; do read -r c < "$d/comm"; echo "${d#/proc/} $c"; done
+
+# memory ceiling and current use, from cgroup v2
+read -r m < /sys/fs/cgroup/memory.max; read -r c < /sys/fs/cgroup/memory.current; echo "$c / $m"
+
+# OOM and pressure history the pod has seen
+while read -r l; do echo "$l"; done < /sys/fs/cgroup/memory.events
+```
+
+`sh -c 'script' a b` binds `a` to `$0` and `b` to `$1`, as real `sh` does.
+
+## What it cannot do, and why that is the point
+
+`policy.go` is short and it is the whole security argument; read it rather
+than this table.
+
+| Action | Answer |
+|---|---|
+| `exec`, anything | **Refused, unconditionally**, before the interpreter consults the filesystem, so adding a binary to the image later does not widen it. |
+| `signal` | Refused. pid 1 is the service, and an endpoint that can `kill` it is a liveness probe with extra steps. |
+| open for **write** | Refused, including inside the roots. `> /proc/sys/...` is a real write on a real kernel knob. |
+| read outside `ReadRoots` | Refused. Default roots are `/proc` and `/sys/fs/cgroup`. Paths are cleaned first, so `/proc/1/../../etc/shadow` is tested as `/etc/shadow`. |
+| read `*/environ` | Refused, although it sits inside an allowed root. See below. |
+| `stat` an ancestor of a root | **Allowed.** Globbing stats each component on the way down, and refusing `stat /proc` made `/proc/1/*` collapse to the literal pattern with exit status 0. Existence of a directory on the way to a root leaks nothing. |
+
+Every action, allowed or refused, is recorded. The HTTP response carries the
+trail and a `denied` count; `/bin/sh` prints refusals to stderr. That matters
+because **an empty answer and a refused answer look identical on stdout.**
+
+### Why `environ` is a deny rather than a comment
+
+`/proc/<pid>/environ` is where a service's credentials arrive, including this
+package's own token, and it is inside `/proc`. Without the deny,
+`read -r v < /proc/1/environ` returns every variable. The first probe of it
+came back *empty*, which read as safe and was not: it used `while read`,
+and a file with no trailing newline never runs a `while read` body. Real dash
+behaves identically. `TestTheEnvironmentIsRefusedInsideTheRoots` uses the bare
+`read` for that reason and fails if the deny is removed.
+
+## Bounds
+
+8 KiB of script, 256 KiB of output per stream, 4096 trail records, a 5-second
+deadline on the HTTP path (the interpreter checks the context at every
+command). Each run gets a fresh interpreter, so no variable, function or cwd
+survives between two scripts, and there is deliberately no interactive REPL.
+
 ## Tests
 
-`handler_test.go` covers only what this package adds: the 404 with no token,
-the 403 for a wrong one, a run that returns output and the exec denial in its
-trail, and the body cap agreeing with gated's (the cap is unexported upstream
-and copied here, so a disagreement fails a test rather than shifting a status
-code). The gate itself is tested in `github.com/blairham/sh/gated`.
+`go test -race -count=20 ./shell/` is deterministic: no sleeps, and the
+allow-side cases use a `t.TempDir()` root rather than `/proc`, so the verdict
+does not depend on the kernel. Every rule is mutation-tested: allowing exec,
+dropping `path.Clean`, allowing writes, removing the `environ` deny, and
+dropping either half of the `$0`/`$@` binding each turn a test red.
 
 ⚠ **Keep struct literals in this package keyed.** This repo's `govet
-fieldalignment` fixer reorders struct fields, and it once turned a positional
-literal into a compile error and deleted field doc comments while doing it.
+fieldalignment` fixer reorders struct fields on `make check`, and it once
+turned a positional literal into a compile error and deleted field doc
+comments while doing it. The structs here are already in aligned order, so
+the fixer should find nothing to move.

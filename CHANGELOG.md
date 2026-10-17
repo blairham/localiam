@@ -27,10 +27,6 @@ notes when this file was started.
   `localiam-<tag>.intoto.jsonl` (was `localiam.intoto.jsonl`), and the image
   now carries SLSA build provenance too. (#13)
 - Release notes come from this file instead of a generated commit list. (#13)
-- The gated `/bin/sh` and the `POST /debug/sh` endpoint now run
-  `github.com/blairham/sh/gated`, where the shell was promoted, instead of
-  localiam's own copy. Behavior is unchanged; `internal/shell` keeps only the
-  HTTP endpoint. (#20)
 
 ## [0.0.4] - 2026-10-05
 
