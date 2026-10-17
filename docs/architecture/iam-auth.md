@@ -122,7 +122,7 @@ So the policy engine is deliberately **not** a general IAM implementation: no
 conditions, no wildcards beyond a trailing `*` on a name, no `NotAction`, no
 deny precedence. It parses the `msk`
 block into topic/group grants, takes `rds.dbUser` as an identity, and treats
-ElastiCache as connect-only. Anything more is modelling AWS for its own sake.
+ElastiCache as connect-only. Anything more is modeling AWS for its own sake.
 
 **The payoff:** a cluster catches "you forgot to add topic X to the service's
 `msk.topics`" — which otherwise only fails once deployed. The Kafka proxy checks
