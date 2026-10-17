@@ -187,8 +187,8 @@ that disagree about the registration API.
 
 It is `gcr.io/distroless/static-debian12:nonroot`: no package manager, no libc,
 no userland, uid 65532. `kubectl exec` still works because `/bin/sh` is a
-[gated shell](../../internal/shell/README.md) — `github.com/blairham/sh/gated`, the
-`github.com/blairham/sh` interpreter behind a deny-by-default policy. It reads `/proc` and
+[gated shell](../../internal/shell/README.md) — `github.com/blairham/sh` linked
+as a library behind a deny-by-default policy. It reads `/proc` and
 `/sys/fs/cgroup`, never `environ`, and refuses every exec, write and signal, so
 it answers diagnostic questions without handing anyone a userland. The same
 shell is reachable over HTTP at `POST /debug/sh` when the server is given

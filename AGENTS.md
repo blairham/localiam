@@ -53,9 +53,9 @@ internal/                  everything else; promoting out of internal is non-bre
   proxy/                   auth termination in front of a store (resp, redis, postgres, kafka)
   server/                  the central half: credential registration + verify/authorize API
   client/                  verifier client for a REMOTE localiam server
-  shell/                   POST /debug/sh: the HTTP front end for github.com/blairham/sh/gated (the shell itself lives there)
+  shell/                   the gated diagnostic shell (github.com/blairham/sh behind a deny-by-default policy)
 cmd/localiam/              one file per subcommand: agent, server, proxy, gencerts; main.go dispatches
-cmd/sh/                    gated.Main as a binary (gated's ExampleMain), installed at /bin/sh in the image
+cmd/sh/                    the gated shell as a binary, installed at /bin/sh in the image
 Dockerfile                 one distroless image, every role, gated /bin/sh
 charts/localiam/           Helm chart: the server
 charts/localiam-sidecar/   Helm library chart: agent and proxy sidecar templates
@@ -143,7 +143,7 @@ Test-only, and deliberately so — the verifier itself has no non-stdlib imports
 - `github.com/twmb/franz-go` — `sasl/aws`, to mint `AWS_MSK_IAM` cross-check vectors.
 - `github.com/twmb/franz-go/pkg/kfake` — an in-process Kafka broker, so the Kafka proxy's per-topic authorization is tested end to end with a real client (`kafka_authz_test.go`).
 
-Non-test dependencies are `go.yaml.in/yaml/v3` (policy — the maintained successor to the archived `gopkg.in/yaml.v3`), `github.com/blairham/sh` (its `gated` package is the gated shell) and stdlib. `verify` itself has **no** non-stdlib imports, by the independence rule.
+Non-test dependencies are `go.yaml.in/yaml/v3` (policy — the maintained successor to the archived `gopkg.in/yaml.v3`), `github.com/blairham/sh` (the gated shell) and stdlib. `verify` itself has **no** non-stdlib imports, by the independence rule.
 
 ## Documentation
 
