@@ -38,7 +38,7 @@ jobs:
   # that it answers correctly under concurrent connections.
   ci:
     name: CI
-    uses: blairham/.github/.github/workflows/go-ci.yml@48d6c8f94aa8381c550818e0a0b2a0d61f280a6b # v0.0.2
+    uses: blairham/.github/.github/workflows/go-ci.yml@2a975269ebbb74aa0b4ec96f45773d7d68cc7bcc # v0.0.3
 
   # What changed, on its own, so the jobs below start as soon as the change is
   # classified. `charts` is everything the Helm charts job reads.
