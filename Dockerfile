@@ -9,7 +9,7 @@
 # Cross-compiles on the build host rather than emulating the target: the Go
 # toolchain targets any GOOS/GOARCH natively, so a multi-platform build runs
 # no foreign code.
-FROM --platform=$BUILDPLATFORM golang:1.26-alpine@sha256:a2012b4a1d1f9f7e9f44e0d39b805a901e856b1dd80b4e6ee4338db547050308 AS build
+FROM --platform=$BUILDPLATFORM golang:1.27-alpine@sha256:70bd7ddea8b6cbe5d6943cde279d6b67feb10cc924fb9100d1d8757c1575b280 AS build
 ARG TARGETOS TARGETARCH
 WORKDIR /src
 COPY . .
