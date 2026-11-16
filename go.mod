@@ -1,6 +1,6 @@
 module github.com/blairham/localiam
 
-go 1.26.10
+go 1.27.4
 
 require (
 	github.com/alicebob/miniredis/v2 v2.40.0
